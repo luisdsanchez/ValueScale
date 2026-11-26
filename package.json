@@ -7,6 +7,9 @@
     "start": "electron .",
     "dist:portable": "electron-builder --win portable --x64"
   },
+  "dependencies": {
+    "semver": "^7.6.0"
+  },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^26.18.0"

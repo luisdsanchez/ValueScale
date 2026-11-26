@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, screen, desktopCapturer, session } = requir
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const autoUpdater = require('./auto-updater');
 
 const FULL_CROP = { x: 0, y: 0, w: 1, h: 1 };
 const PANEL_WIDTH = 320;
@@ -425,6 +426,10 @@ app.whenReady().then(() => {
 
   createMain();
 
+  // Setup auto-updater
+  autoUpdater.setupIpcHandlers();
+  autoUpdater.startPeriodicCheck(win);
+
   ipcMain.handle('get-app-version', () => app.getVersion());
   ipcMain.handle('get-settings', () => settings);
   ipcMain.handle('set-warning-settings', (_e, patch) => {
@@ -637,4 +642,7 @@ app.whenReady().then(() => {
   ipcMain.on('quit', () => app.quit());
 });
 
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {
+  autoUpdater.stopPeriodicCheck();
+  app.quit();
+});

@@ -100,6 +100,68 @@
     background: linear-gradient(to right, #000122 0%, #0C0074 12%, #4D00C1 25%, #EC000E 65%, #FF7D00 75%, #FFFC86 88%, #FFFFFF 100%);
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
   }
+  #update-notification {
+    position: fixed;
+    z-index: 3;
+    top: 50%;
+    left: 50%;
+    box-sizing: border-box;
+    max-width: calc(100vw - 32px);
+    padding: 16px;
+    border-radius: 8px;
+    background: rgba(44, 44, 44, 0.95);
+    color: var(--white);
+    font: 13px "Segoe UI", sans-serif;
+    text-align: center;
+    transform: translate(-50%, -50%);
+    animation: slideIn 300ms ease-out;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+  #update-notification[hidden] { display: none; }
+  #update-notification-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+  }
+  #update-notification-title {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  #update-notification-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+  #update-notification-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font: 12px "Segoe UI", sans-serif;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+  #install-update-btn {
+    background: var(--accent);
+    color: var(--black);
+    font-weight: 600;
+  }
+  #install-update-btn:hover { background: #FF7D52; }
+  #dismiss-update-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--white);
+  }
+  #dismiss-update-btn:hover { background: rgba(255, 255, 255, 0.2); }
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% - 20px));
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
   #quick-tooltip {
     position: fixed;
     z-index: 5;
@@ -207,6 +269,7 @@
   <span class="saturation-legend-gradient" aria-hidden="true"></span>
   <span aria-hidden="true">VIVID</span>
 </div>
+<div id="update-notification" role="status" aria-label="Update notification" hidden></div>
 <div id="capture-error" hidden></div>
 <div id="window-selection-prompt" role="dialog" hidden>
   <div class="window-selection-card">
@@ -588,6 +651,48 @@ function applySettings(s) {
 }
 window.api.onSettings(applySettings);
 window.api.onCaptureTargetChanged(startStream);
+
+// Setup update notification handlers
+const updateNotification = document.getElementById('update-notification');
+window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
+  const content = document.createElement('div');
+  content.id = 'update-notification-content';
+  content.innerHTML = `
+    <div id="update-notification-title">Update Available</div>
+    <div>ValueScale ${version} is ready to install</div>
+  `;
+  const buttons = document.createElement('div');
+  buttons.id = 'update-notification-buttons';
+  
+  const installBtn = document.createElement('button');
+  installBtn.id = 'install-update-btn';
+  installBtn.textContent = 'Install Now';
+  installBtn.addEventListener('click', () => {
+    window.api.installUpdate();
+  });
+  
+  const dismissBtn = document.createElement('button');
+  dismissBtn.id = 'dismiss-update-btn';
+  dismissBtn.textContent = 'Later';
+  dismissBtn.addEventListener('click', () => {
+    updateNotification.hidden = true;
+  });
+  
+  buttons.appendChild(installBtn);
+  buttons.appendChild(dismissBtn);
+  content.appendChild(buttons);
+  
+  updateNotification.textContent = '';
+  updateNotification.appendChild(content);
+  updateNotification.hidden = false;
+});
+
+window.api.onUpdateDownloaded(() => {
+  const installBtn = document.getElementById('install-update-btn');
+  if (installBtn) {
+    installBtn.textContent = 'Install & Restart';
+  }
+});
 
 gl.clearColor(0, 0, 0, 1);
 window.api.getSettings()
