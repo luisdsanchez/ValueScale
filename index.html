@@ -1,0 +1,660 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ValueScale</title>
+<style>
+  :root { --surface: #2C2C2C; --accent: #FF6C38; --white: #f5f5f5; --black: #1a1a1a; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--black); }
+  body { position: relative; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .window-controls, .quick-access {
+    position: fixed;
+    z-index: 4;
+    top: 6px;
+    display: flex;
+    gap: 3px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+  .window-controls { right: 6px; }
+  .quick-access {
+    top: 33px;
+    right: 6px;
+    width: 26px;
+    display: block;
+  }
+  .quick-filter-viewport {
+    display: grid;
+    grid-template-rows: 1fr;
+    max-height: calc(100vh - 56px);
+    overflow: hidden;
+    transition: grid-template-rows 600ms ease-in-out;
+  }
+  .quick-filter-controls {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  .quick-filter-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: transform 600ms ease-in-out;
+  }
+  .quick-access.collapsed .quick-filter-viewport { grid-template-rows: 0fr; }
+  .quick-access.collapsed .quick-filter-stack { transform: translateY(-100%); }
+  .quick-filter-controls::-webkit-scrollbar { display: none; }
+  .quick-filter-stack > * { flex-shrink: 0; }
+  body:hover .window-controls, body:hover .quick-access,
+  .window-controls:focus-within, .quick-access:focus-within { opacity: 1; pointer-events: auto; }
+  .window-controls button, .quick-access button {
+    display: grid;
+    width: 26px;
+    height: 24px;
+    place-items: center;
+    border: 0;
+    border-radius: 4px;
+    background: rgba(44, 44, 44, 0.94);
+    color: var(--white);
+    cursor: pointer;
+  }
+  .window-controls button:not(:disabled):hover, .quick-access button:not(:disabled):hover { box-shadow: inset 0 0 0 1px var(--accent); }
+  .window-controls button:focus-visible, .quick-access button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  #quick-access-toggle { width: 100%; height: 17px; margin-top: 6px; }
+  #quick-access-toggle svg { width: 12px; height: 12px; transition: transform 600ms ease-in-out; }
+  .quick-access.collapsed #quick-access-toggle svg { transform: rotate(180deg); }
+  .quick-filter-controls button[aria-pressed="true"] { background: var(--accent); color: var(--black); }
+  .quick-filter-controls button:disabled, .value-count.inactive { opacity: 0.45; cursor: default; }
+  .quick-filter-stack svg, .window-controls svg { width: 14px; height: 14px; }
+  .quick-filter-controls .warning-button { padding: 0; }
+  .quick-filter-stack .warning-icon { width: 20px; height: 20px; }
+  .warning-icon text { fill: var(--surface); }
+  .quick-filter-controls button[aria-pressed="true"] .warning-icon text { fill: var(--accent); }
+  .value-count { display: grid; width: 26px; height: 24px; place-items: center; border-radius: 4px; background: rgba(44, 44, 44, 0.94); color: var(--white); font: 12px "Segoe UI", sans-serif; }
+  .quick-filter-controls button, .quick-filter-controls .value-count { width: 100%; }
+  #saturation-legend {
+    position: fixed;
+    z-index: 2;
+    bottom: 8px;
+    left: 50%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: min(190px, calc(100vw - 16px));
+    color: var(--white);
+    font: 600 9px "Segoe UI", sans-serif;
+    text-shadow: 0 1px 3px #000;
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
+  #saturation-legend[hidden] { display: none; }
+  .saturation-legend-gradient {
+    flex: 1;
+    min-width: 0;
+    height: 5px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #000122 0%, #0C0074 12%, #4D00C1 25%, #EC000E 65%, #FF7D00 75%, #FFFC86 88%, #FFFFFF 100%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+  }
+  #quick-tooltip {
+    position: fixed;
+    z-index: 5;
+    box-sizing: border-box;
+    width: max-content;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(44, 44, 44, 0.96);
+    color: var(--white);
+    font: 11px/1.3 "Segoe UI", sans-serif;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+  }
+  @media (max-width: 155px) {
+    .window-controls { gap: 2px; }
+    .window-controls button { width: 18px; height: 17px; }
+    .quick-access { top: 26px; width: 24px; }
+    .quick-filter-viewport { max-height: calc(100vh - 43px); }
+    .quick-filter-stack { gap: 1px; }
+    .quick-filter-controls button, .quick-filter-controls .value-count { height: 17px; }
+    .quick-filter-stack .warning-icon { width: 16px; height: 16px; }
+    #quick-access-toggle { height: 14px; margin-top: 3px; }
+  }
+  @media (max-height: 241px) and (min-width: 360px) {
+    .quick-access { top: 6px; right: 122px; width: auto; display: flex; align-items: center; gap: 6px; }
+    .quick-filter-viewport { display: block; flex: none; width: 200px; max-height: none; transition: width 600ms ease-in-out; }
+    .quick-filter-controls { width: 200px; overflow: hidden; }
+    .quick-filter-stack { flex-direction: row; align-items: center; }
+    .quick-filter-controls button, .quick-filter-controls .value-count { width: 26px; }
+    #fewer-values { order: 1; }
+    #value-count { order: 2; }
+    #more-values { order: 3; }
+    #value-warnings-toggle { order: 4; }
+    #saturation-warnings-toggle { order: 5; }
+    #quick-access-toggle { order: -1; flex: none; width: 26px; height: 24px; margin-top: 0; }
+    #quick-access-toggle svg { transform: rotate(90deg); }
+    .quick-access.collapsed #quick-access-toggle svg { transform: rotate(-90deg); }
+    .quick-access.collapsed .quick-filter-viewport { width: 0; }
+    .quick-access.collapsed .quick-filter-stack { transform: translateX(100%); }
+  }
+  .minimize-icon { width: 9px; height: 5px; border-bottom: 1px solid currentColor; }
+  .maximize-icon { width: 9px; height: 8px; border: 1px solid currentColor; }
+  .close-icon { position: relative; width: 11px; height: 11px; }
+  .close-icon::before, .close-icon::after {
+    position: absolute;
+    top: 5px;
+    left: 0;
+    width: 11px;
+    height: 1px;
+    background: currentColor;
+    content: "";
+    transform: rotate(45deg);
+  }
+  .close-icon::after { transform: rotate(-45deg); }
+  #capture-error {
+    position: fixed;
+    z-index: 2;
+    top: 38px;
+    left: 8px;
+    max-width: calc(100vw - 32px);
+    padding: 5px 8px;
+    border-radius: 4px;
+    background: rgba(44, 44, 44, 0.94);
+    color: var(--white);
+    font: 12px "Segoe UI", sans-serif;
+    pointer-events: none;
+  }
+  #capture-error { color: var(--accent); }
+  #window-selection-prompt {
+    position: fixed;
+    z-index: 3;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+  }
+  #window-selection-prompt[hidden] { display: none; }
+  .window-selection-card {
+    padding: 0;
+    color: var(--white);
+    font: 14px "Segoe UI", sans-serif;
+    text-align: center;
+    pointer-events: none;
+  }
+  .window-selection-card button {
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--accent);
+    color: var(--black);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    pointer-events: auto;
+  }
+  .window-selection-card button:hover { filter: brightness(1.1); }
+  .window-selection-card button:focus-visible { outline: 2px solid var(--white); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="saturation-legend" role="img" aria-label="Saturation scale, dull to vivid" hidden>
+  <span aria-hidden="true">DULL</span>
+  <span class="saturation-legend-gradient" aria-hidden="true"></span>
+  <span aria-hidden="true">VIVID</span>
+</div>
+<div id="capture-error" hidden></div>
+<div id="window-selection-prompt" role="dialog" hidden>
+  <div class="window-selection-card">
+    <button id="select-window" type="button">Choose a window to capture</button>
+  </div>
+</div>
+<div class="window-controls" aria-label="Window controls">
+  <!-- Settings icon: Lucide Icons, ISC License.
+  Copyright (c) 2026 Lucide Icons and Contributors
+  Permission to use, copy, modify, and/or distribute this software for any
+  purpose with or without fee is hereby granted, provided that the above
+  copyright notice and this permission notice appear in all copies.
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. -->
+  <button id="open-settings" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
+  <button id="minimize" type="button" aria-label="Minimize" title="Minimize"><span class="minimize-icon"></span></button>
+  <button id="maximize" type="button" aria-label="Maximize or restore" title="Maximize or restore"><span class="maximize-icon"></span></button>
+  <button id="close" class="close" type="button" aria-label="Close" title="Close"><span class="close-icon"></span></button>
+</div>
+<div class="quick-access">
+  <div class="quick-filter-viewport">
+  <div id="quick-filter-controls" class="quick-filter-controls">
+  <div class="quick-filter-stack">
+  <button id="grayscale-toggle" class="quick-filter-button" type="button" aria-label="Toggle grayscale" title="Toggle grayscale (off shows original color)" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg></button>
+  <button id="posterize-toggle" class="quick-filter-button" type="button" aria-label="Toggle posterize" title="Toggle posterize" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="2" width="4" height="12" fill="currentColor" opacity=".35"/><rect x="6" y="2" width="4" height="12" fill="currentColor" opacity=".65"/><rect x="11" y="2" width="4" height="12" fill="currentColor"/></svg></button>
+  <button id="more-values" class="quick-filter-button" type="button" aria-label="More gray values" title="More gray values"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M8 3v10"/></svg></button>
+  <span id="value-count" class="quick-filter-button value-count" role="status" aria-label="Gray values: 4" title="Gray values (excluding black and white)">4</span>
+  <button id="fewer-values" class="quick-filter-button" type="button" aria-label="Fewer gray values" title="Fewer gray values"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+  <button id="value-warnings-toggle" class="quick-filter-button warning-button" type="button" aria-label="Toggle value warnings" title="Toggle value warnings" aria-pressed="false"><svg class="warning-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.8 2.4Q8 .2 9.2 2.4L14.5 11.9Q15.8 14.5 13 14.5H3Q.2 14.5 1.5 11.9Z" fill="currentColor"/><text x="8" y="12" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="8" font-weight="900">V</text></svg></button>
+  <button id="saturation-warnings-toggle" class="quick-filter-button warning-button" type="button" aria-label="Toggle saturation warnings" title="Toggle saturation warnings" aria-pressed="false"><svg class="warning-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.8 2.4Q8 .2 9.2 2.4L14.5 11.9Q15.8 14.5 13 14.5H3Q.2 14.5 1.5 11.9Z" fill="currentColor"/><text x="8" y="12" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="8" font-weight="900">S</text></svg></button>
+  </div>
+  </div>
+  </div>
+  <button id="quick-access-toggle" type="button" aria-label="Hide quick controls" aria-expanded="true" aria-controls="quick-filter-controls" title="Hide quick controls"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
+</div>
+<div id="quick-tooltip" role="tooltip" hidden></div>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', { antialias: false, alpha: false });
+
+const VS = `
+attribute vec2 p;
+varying vec2 uv;
+void main() {
+  uv = vec2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+  gl_Position = vec4(p, 0.0, 1.0);
+}`;
+
+const FS = `
+precision highp float;
+varying vec2 uv;
+uniform sampler2D tex;
+uniform vec4 crop;
+uniform float levels;
+uniform float bright;
+uniform float contrast;
+uniform float posterize;
+uniform float grayscaleEnabled;
+uniform float valueWarnings;
+uniform float darkThreshold;
+uniform float lightThreshold;
+uniform float saturationWarnings;
+uniform float saturationThreshold;
+uniform float saturationBrightnessThreshold;
+uniform float pixelRatio;
+vec3 warningOverlay(vec3 base, vec3 color, float direction, float stripeOpacity) {
+  float stripe = 1.0 - step(6.0, mod((gl_FragCoord.x + direction * gl_FragCoord.y) / pixelRatio, 12.0));
+  return mix(base, color, 0.1 + stripe * (stripeOpacity - 0.1));
+}
+vec3 saturationGradient(float saturation) {
+  if (saturation < 0.12)
+    return mix(vec3(0.0, 1.0, 34.0), vec3(12.0, 0.0, 116.0), saturation / 0.12) / 255.0;
+  if (saturation < 0.25)
+    return mix(vec3(12.0, 0.0, 116.0), vec3(77.0, 0.0, 193.0), (saturation - 0.12) / 0.13) / 255.0;
+  if (saturation < 0.65)
+    return mix(vec3(77.0, 0.0, 193.0), vec3(236.0, 0.0, 14.0), (saturation - 0.25) / 0.40) / 255.0;
+  if (saturation < 0.75)
+    return mix(vec3(236.0, 0.0, 14.0), vec3(255.0, 125.0, 0.0), (saturation - 0.65) / 0.10) / 255.0;
+  if (saturation < 0.88)
+    return mix(vec3(255.0, 125.0, 0.0), vec3(255.0, 252.0, 134.0), (saturation - 0.75) / 0.13) / 255.0;
+  return mix(vec3(255.0, 252.0, 134.0), vec3(255.0), (saturation - 0.88) / 0.12) / 255.0;
+}
+void main() {
+  vec3 c = texture2D(tex, crop.xy + uv * crop.zw).rgb;
+  float grayscale = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float adjusted = clamp((grayscale - 0.5) * contrast + 0.5 + bright / 100.0, 0.0, 1.0);
+  float q = min(floor(adjusted * levels), levels - 1.0) / (levels - 1.0);
+  float outputValue = posterize > 0.5 ? q : grayscale;
+  vec3 outputColor = grayscaleEnabled > 0.5 ? vec3(outputValue) : c;
+  float highest = max(c.r, max(c.g, c.b));
+  float lowest = min(c.r, min(c.g, c.b));
+  float saturation = highest > 0.0 ? (highest - lowest) / highest : 0.0;
+  if (saturationWarnings > 0.5 && highest > saturationBrightnessThreshold / 100.0) {
+    outputColor = saturationGradient(saturation);
+  }
+  if (valueWarnings > 0.5) {
+    if (grayscale <= darkThreshold) {
+      outputColor = warningOverlay(outputColor, vec3(0.35, 0.82, 1.0), 1.0, 0.4);
+    } else if (grayscale >= lightThreshold) {
+      outputColor = warningOverlay(outputColor, vec3(1.0, 0.62, 0.35), -1.0, 0.4);
+    }
+  }
+  gl_FragColor = vec4(outputColor, 1.0);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'p');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+const tex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+const U = {
+  crop: gl.getUniformLocation(prog, 'crop'),
+  levels: gl.getUniformLocation(prog, 'levels'),
+  bright: gl.getUniformLocation(prog, 'bright'),
+  contrast: gl.getUniformLocation(prog, 'contrast'),
+  posterize: gl.getUniformLocation(prog, 'posterize'),
+  grayscaleEnabled: gl.getUniformLocation(prog, 'grayscaleEnabled'),
+  valueWarnings: gl.getUniformLocation(prog, 'valueWarnings'),
+  darkThreshold: gl.getUniformLocation(prog, 'darkThreshold'),
+  lightThreshold: gl.getUniformLocation(prog, 'lightThreshold'),
+  saturationWarnings: gl.getUniformLocation(prog, 'saturationWarnings'),
+  saturationThreshold: gl.getUniformLocation(prog, 'saturationThreshold'),
+  saturationBrightnessThreshold: gl.getUniformLocation(prog, 'saturationBrightnessThreshold'),
+  pixelRatio: gl.getUniformLocation(prog, 'pixelRatio'),
+};
+
+const FULL_CROP = { x: 0, y: 0, w: 1, h: 1 };
+let settings = {
+  levels: 6,
+  brightness: 10,
+  contrast: 1.43,
+  posterize: true,
+  captureType: 'window',
+  captureWindowName: '',
+  crop: FULL_CROP,
+  showQuickFilterButtons: true,
+  grayscale: true,
+  valueWarnings: false,
+  darkThreshold: 2,
+  lightThreshold: 97,
+  saturationWarnings: false,
+  saturationThreshold: 85,
+  saturationBrightnessThreshold: 10,
+};
+let projectionAspectRatio = null;
+const video = document.createElement('video');
+video.muted = true;
+const captureError = document.getElementById('capture-error');
+const windowSelectionPrompt = document.getElementById('window-selection-prompt');
+const quickAccess = document.querySelector('.quick-access');
+const quickAccessToggle = document.getElementById('quick-access-toggle');
+const quickFilterControls = document.getElementById('quick-filter-controls');
+const quickTooltip = document.getElementById('quick-tooltip');
+const posterizeToggle = document.getElementById('posterize-toggle');
+const grayscaleToggle = document.getElementById('grayscale-toggle');
+const valueWarningsToggle = document.getElementById('value-warnings-toggle');
+const saturationWarningsToggle = document.getElementById('saturation-warnings-toggle');
+const saturationLegend = document.getElementById('saturation-legend');
+const fewerValues = document.getElementById('fewer-values');
+const valueCount = document.getElementById('value-count');
+const moreValues = document.getElementById('more-values');
+let tooltipTarget = null;
+
+function hideQuickTooltip() {
+  if (tooltipTarget) tooltipTarget.removeAttribute('aria-describedby');
+  tooltipTarget = null;
+  quickTooltip.hidden = true;
+}
+
+function positionQuickTooltip() {
+  const bounds = tooltipTarget.getBoundingClientRect();
+  quickTooltip.style.maxWidth = `${Math.max(0, Math.min(220, bounds.left - 12))}px`;
+  quickTooltip.style.maxHeight = 'none';
+  let fontSize = 11;
+  quickTooltip.style.fontSize = `${fontSize}px`;
+  let tooltipBounds = quickTooltip.getBoundingClientRect();
+  while (tooltipBounds.height > innerHeight - 8 && fontSize > 8) {
+    quickTooltip.style.fontSize = `${--fontSize}px`;
+    tooltipBounds = quickTooltip.getBoundingClientRect();
+  }
+  quickTooltip.style.maxHeight = `${Math.max(0, innerHeight - 8)}px`;
+  tooltipBounds = quickTooltip.getBoundingClientRect();
+  quickTooltip.style.left = `${bounds.left - tooltipBounds.width - 6}px`;
+  quickTooltip.style.top = `${Math.max(4, Math.min(bounds.top + (bounds.height - tooltipBounds.height) / 2, innerHeight - tooltipBounds.height - 4))}px`;
+}
+
+function showQuickTooltip(target) {
+  hideQuickTooltip();
+  tooltipTarget = target;
+  target.setAttribute('aria-describedby', 'quick-tooltip');
+  quickTooltip.textContent = target.dataset.tooltip;
+  quickTooltip.hidden = false;
+  positionQuickTooltip();
+}
+
+document.querySelectorAll('.quick-access [title], #open-settings[title]').forEach((target) => {
+  target.dataset.tooltip = target.title;
+  target.removeAttribute('title');
+  target.addEventListener('mouseenter', () => showQuickTooltip(target));
+  target.addEventListener('mouseleave', () => {
+    if (tooltipTarget === target) hideQuickTooltip();
+  });
+  target.addEventListener('focus', () => showQuickTooltip(target));
+  target.addEventListener('blur', () => {
+    if (tooltipTarget === target) hideQuickTooltip();
+  });
+});
+quickFilterControls.addEventListener('scroll', () => {
+  if (!tooltipTarget) return;
+  if (quickFilterControls.contains(tooltipTarget)) {
+    const targetBounds = tooltipTarget.getBoundingClientRect();
+    const viewportBounds = quickFilterControls.getBoundingClientRect();
+    if (targetBounds.bottom <= viewportBounds.top || targetBounds.top >= viewportBounds.bottom) {
+      hideQuickTooltip();
+      return;
+    }
+  }
+  positionQuickTooltip();
+});
+addEventListener('resize', hideQuickTooltip);
+
+function showWindowSelectionPrompt() {
+  windowSelectionPrompt.hidden = false;
+  captureError.hidden = true;
+}
+
+async function startStream() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach((t) => t.stop());
+    video.srcObject = null;
+  }
+  if (!settings.captureWindowName) {
+    showWindowSelectionPrompt();
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 30, cursor: 'never' },
+      audio: false,
+    });
+    const track = stream.getVideoTracks()[0];
+    if (!track) throw new Error('Capture source returned no video track.');
+    video.srcObject = stream;
+    track.addEventListener('ended', () => {
+      if (video.srcObject !== stream) return;
+      showWindowSelectionPrompt();
+    });
+    await video.play();
+    windowSelectionPrompt.hidden = true;
+    captureError.hidden = true;
+  } catch (error) {
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      if (video.srcObject === stream) video.srcObject = null;
+    }
+    console.error('Failed to start window capture:', error);
+    showWindowSelectionPrompt();
+  }
+}
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(innerWidth * dpr));
+  canvas.height = Math.max(1, Math.round(innerHeight * dpr));
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function fitViewport() {
+  const canvasAspect = canvas.width / canvas.height;
+  const crop = settings.crop;
+  const videoAspect = (video.videoWidth * crop.w) / (video.videoHeight * crop.h);
+  let width = canvas.width;
+  let height = canvas.height;
+
+  if (videoAspect > canvasAspect) {
+    height = Math.round(canvas.width / videoAspect);
+  } else {
+    width = Math.round(canvas.height * videoAspect);
+  }
+
+  gl.viewport(
+    Math.floor((canvas.width - width) / 2),
+    Math.floor((canvas.height - height) / 2),
+    width,
+    height
+  );
+}
+
+function updateProjectionAspectRatio() {
+  if (!video.videoWidth || !video.videoHeight) return;
+  const crop = settings.crop;
+  const ratio = (video.videoWidth * crop.w) / (video.videoHeight * crop.h);
+  if (!Number.isFinite(ratio) || ratio <= 0 || ratio === projectionAspectRatio) return;
+  projectionAspectRatio = ratio;
+  window.api.setProjectionAspectRatio(ratio).catch((error) => {
+    console.error('Failed to fit the projection to the cropped source:', error);
+    captureError.textContent = 'Could not fit the projection to the capture area.';
+    captureError.hidden = false;
+  });
+}
+
+addEventListener('resize', resize);
+resize();
+
+function frame() {
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  if (video.readyState >= 2) {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    updateProjectionAspectRatio();
+    fitViewport();
+    const crop = settings.crop;
+    gl.uniform4f(U.crop, crop.x, crop.y, crop.w, crop.h);
+    gl.uniform1f(U.levels, settings.levels);
+    gl.uniform1f(U.bright, settings.brightness);
+    gl.uniform1f(U.contrast, settings.contrast);
+    gl.uniform1f(U.posterize, settings.posterize ? 1 : 0);
+    gl.uniform1f(U.grayscaleEnabled, settings.grayscale ? 1 : 0);
+    gl.uniform1f(U.valueWarnings, settings.valueWarnings ? 1 : 0);
+    gl.uniform1f(U.darkThreshold, settings.darkThreshold / 100);
+    gl.uniform1f(U.lightThreshold, settings.lightThreshold / 100);
+    gl.uniform1f(U.saturationWarnings, settings.saturationWarnings ? 1 : 0);
+    gl.uniform1f(U.saturationThreshold, settings.saturationThreshold / 100);
+    gl.uniform1f(U.saturationBrightnessThreshold, settings.saturationBrightnessThreshold / 100);
+    gl.uniform1f(U.pixelRatio, window.devicePixelRatio || 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  requestAnimationFrame(frame);
+}
+
+function applySettings(s) {
+  if (s.showQuickFilterButtons && !settings.showQuickFilterButtons) quickFilterControls.scrollTop = 0;
+  settings = s;
+  quickAccess.classList.toggle('collapsed', !s.showQuickFilterButtons);
+  quickFilterControls.inert = !s.showQuickFilterButtons;
+  quickAccessToggle.setAttribute('aria-expanded', String(s.showQuickFilterButtons));
+  const quickAccessLabel = s.showQuickFilterButtons ? 'Hide quick controls' : 'Show quick controls';
+  quickAccessToggle.setAttribute('aria-label', quickAccessLabel);
+  quickAccessToggle.dataset.tooltip = quickAccessLabel;
+  posterizeToggle.setAttribute('aria-pressed', String(s.posterize));
+  posterizeToggle.disabled = !s.grayscale;
+  grayscaleToggle.setAttribute('aria-pressed', String(s.grayscale));
+  valueWarningsToggle.setAttribute('aria-pressed', String(s.valueWarnings));
+  saturationWarningsToggle.setAttribute('aria-pressed', String(s.saturationWarnings));
+  saturationLegend.hidden = !s.saturationWarnings;
+  valueCount.textContent = String(s.levels - 2);
+  valueCount.setAttribute('aria-label', `Gray values: ${s.levels - 2}`);
+  valueCount.classList.toggle('inactive', !s.grayscale);
+  fewerValues.disabled = !s.grayscale || s.levels <= 2;
+  moreValues.disabled = !s.grayscale || s.levels >= 10;
+}
+window.api.onSettings(applySettings);
+window.api.onCaptureTargetChanged(startStream);
+
+gl.clearColor(0, 0, 0, 1);
+window.api.getSettings()
+  .then((s) => { applySettings(s); return startStream(); })
+  .then(() => requestAnimationFrame(frame))
+  .catch((error) => {
+    console.error('Failed to load settings:', error);
+    captureError.textContent = 'Could not load app settings.';
+    captureError.hidden = false;
+  });
+
+let dragging = false;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  dragging = true;
+  canvas.setPointerCapture(e.pointerId);
+  window.api.dragStart({ x: e.screenX, y: e.screenY });
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (dragging) window.api.dragMove({ x: e.screenX, y: e.screenY });
+});
+canvas.addEventListener('pointerup', (e) => {
+  dragging = false;
+  window.api.dragEnd();
+});
+canvas.addEventListener('pointercancel', () => {
+  if (dragging) {
+    dragging = false;
+    window.api.dragEnd();
+  }
+});
+addEventListener('contextmenu', (e) => e.preventDefault());
+quickAccessToggle.addEventListener('click', async () => {
+  hideQuickTooltip();
+  quickAccessToggle.disabled = true;
+  captureError.hidden = true;
+  try {
+    await window.api.setQuickFilterButtons(!settings.showQuickFilterButtons);
+  } catch (error) {
+    console.error('Failed to update quick controls:', error);
+    captureError.textContent = 'Could not update quick controls.';
+    captureError.hidden = false;
+  } finally {
+    quickAccessToggle.disabled = false;
+  }
+});
+for (const [button, action] of [
+  [grayscaleToggle, 'grayscale'],
+  [posterizeToggle, 'posterize'],
+  [fewerValues, 'fewer'],
+  [moreValues, 'more'],
+  [valueWarningsToggle, 'valueWarnings'],
+  [saturationWarningsToggle, 'saturationWarnings'],
+]) {
+  button.addEventListener('click', () => {
+    window.api.adjustFilter(action).catch((error) => {
+      console.error('Failed to adjust filter:', error);
+      captureError.textContent = 'Could not update the projection settings.';
+      captureError.hidden = false;
+    });
+  });
+}
+document.getElementById('open-settings').addEventListener('click', () => window.api.openPanel());
+document.getElementById('minimize').addEventListener('click', () => window.api.minimize());
+document.getElementById('maximize').addEventListener('click', () => window.api.toggleMaximize());
+document.getElementById('close').addEventListener('click', () => window.api.quit());
+document.getElementById('select-window').addEventListener('click', () => window.api.openPanel(true));
+</script>
+</body>
+</html>

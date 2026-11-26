@@ -1,0 +1,36 @@
+{
+  "name": "valuescale",
+  "version": "1.2.2",
+  "description": "Always-on-top grayscale projection for artists",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:portable": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.valuescale.app",
+    "productName": "ValueScale",
+    "artifactName": "ValueScale_${version}.${ext}",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "crop-selection.html",
+      "panel.html",
+      "assets/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "assets/valuescale-icon.ico"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}
