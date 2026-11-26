@@ -20,7 +20,7 @@
   .drag-handle svg { width: 14px; height: 14px; color: var(--accent); }
   .section { margin-bottom: 10px; padding: 11px 12px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 7px; background: #242424; }
   .section h2 { margin: 0 0 10px; color: var(--white); font-size: 12px; font-weight: 600; }
-  .section > :last-child, #grayscale-settings > :last-child { margin-bottom: 0; }
+  .section > :last-child, #filter-settings > :last-child { margin-bottom: 0; }
   .row { margin-bottom: 12px; }
   .label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; color: rgba(255, 255, 255, 0.72); }
   .label b { color: var(--accent); font-weight: 500; }
@@ -56,7 +56,6 @@
   select:focus, button:focus-visible, input[type=range]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   .toggle { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--white); }
   .toggle input { accent-color: var(--accent); }
-  #grayscale-settings.inactive { opacity: 0.5; }
   button:disabled { cursor: default; }
   .actions { display: flex; gap: 12px; margin: 6px 0; }
   .actions button { padding: 4px 7px; border: 1px solid var(--black); border-radius: 4px; color: var(--white); }
@@ -101,9 +100,7 @@
   </section>
   <section class="section" aria-labelledby="grayscale-heading">
   <h2 id="grayscale-heading">Grayscale</h2>
-  <label class="toggle"><input id="grayscale" type="checkbox"> Grayscale (off shows original color)</label>
-  <div id="filter-error" class="error" role="alert" hidden></div>
-  <div id="grayscale-settings">
+  <div id="filter-settings">
   <div class="row">
     <div class="label"><span>Gray values</span><span class="slider-value"><b id="vl"></b><button class="slider-reset" type="button" data-setting="levels" aria-label="Reset gray values" title="Reset gray values">↻</button></span></div>
     <div class="slider">
@@ -171,9 +168,7 @@ const els = {
   contrast: document.getElementById('contrast'),
 };
 const posterize = document.getElementById('posterize');
-const grayscale = document.getElementById('grayscale');
-const grayscaleSettings = document.getElementById('grayscale-settings');
-const filterError = document.getElementById('filter-error');
+const filterSettings = document.getElementById('filter-settings');
 const valueWarnings = document.getElementById('value-warnings');
 const warningThresholds = {
   darkThreshold: document.getElementById('dark-threshold'),
@@ -232,11 +227,6 @@ function show(s) {
     out[k].textContent = formatAdjustment(k, value);
   }
   posterize.checked = s.posterize;
-  grayscale.checked = s.grayscale;
-  grayscaleSettings.classList.toggle('inactive', !s.grayscale);
-  grayscaleSettings.querySelectorAll('input, button').forEach((element) => {
-    element.disabled = !s.grayscale;
-  });
   valueWarnings.checked = s.valueWarnings;
   for (const key in warningThresholds) {
     warningThresholds[key].value = s[key];
@@ -288,7 +278,7 @@ for (const k in els) {
   });
 }
 const sliderDefaults = { levels: 4, brightness: 0, contrast: 0 };
-document.querySelectorAll('#grayscale-settings .slider-reset').forEach((button) => {
+filterSettings.querySelectorAll('.slider-reset').forEach((button) => {
   button.addEventListener('click', () => {
     const key = button.dataset.setting;
     const value = sliderDefaults[key];
@@ -329,19 +319,6 @@ document.getElementById('reset-area').addEventListener('click', async () => {
 });
 posterize.addEventListener('change', () => {
   window.api.setSettings({ posterize: posterize.checked });
-});
-grayscale.addEventListener('change', async () => {
-  filterError.hidden = true;
-  grayscale.disabled = true;
-  try {
-    await window.api.adjustFilter('grayscale');
-  } catch (error) {
-    if (currentSettings) show(currentSettings);
-    filterError.textContent = error && error.message ? error.message : String(error);
-    filterError.hidden = false;
-  } finally {
-    grayscale.disabled = false;
-  }
 });
 async function updateWarnings(patch) {
   warningError.hidden = true;

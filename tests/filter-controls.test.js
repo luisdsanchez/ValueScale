@@ -51,6 +51,7 @@ async function loadMain(savedSettings = null) {
     require: (name) => {
       if (name === 'electron') return electron;
       if (name === 'fs') return fakeFs;
+      if (name === './auto-updater') return { setupIpcHandlers() {}, startPeriodicCheck() {}, stopPeriodicCheck() {} };
       return require(name);
     },
     __dirname: 'test',
@@ -208,21 +209,23 @@ test('warning endpoints migrate to the supported range and persist', async () =>
   assert.equal(reopened.handlers['get-settings']().lightThreshold, 99);
 });
 
-test('color view and saturation warnings persist without changing grayscale adjustments', async () => {
-  const { handlers, writes } = await loadMain({ version: 6, levels: 4, brightness: 25, contrast: 2 });
+test('grayscale stays enabled while saturation warnings and adjustments persist', async () => {
+  const { handlers, listeners, writes } = await loadMain({ version: 6, grayscale: false, levels: 4, brightness: 25, contrast: 2 });
   let settings = handlers['get-settings']();
-  assert.equal(settings.grayscale, true);
+  assert.equal('grayscale' in settings, false);
   assert.equal(settings.saturationWarnings, false);
   assert.equal(settings.saturationThreshold, 85);
   assert.equal(settings.saturationBrightnessThreshold, 10);
-  handlers['adjust-filter'](null, 'grayscale');
+  assert.throws(() => handlers['adjust-filter'](null, 'grayscale'), /Unknown filter action/);
+  listeners['set-settings'](null, { grayscale: false });
+  assert.equal('grayscale' in handlers['get-settings'](), false);
   handlers['adjust-filter'](null, 'valueWarnings');
   handlers['adjust-filter'](null, 'saturationWarnings');
   handlers['set-warning-settings'](null, { saturationThreshold: 65 });
   handlers['set-warning-settings'](null, { saturationBrightnessThreshold: 45 });
   const reopened = await loadMain(writes.at(-1));
   settings = reopened.handlers['get-settings']();
-  assert.equal(settings.grayscale, false);
+  assert.equal('grayscale' in settings, false);
   assert.equal(settings.valueWarnings, true);
   assert.equal(settings.saturationWarnings, true);
   assert.equal(settings.saturationThreshold, 65);
@@ -230,8 +233,7 @@ test('color view and saturation warnings persist without changing grayscale adju
   assert.equal(settings.levels, 4);
   assert.equal(settings.brightness, 25);
   assert.equal(settings.contrast, 2);
-  reopened.handlers['adjust-filter'](null, 'grayscale');
-  assert.equal(reopened.handlers['get-settings']().grayscale, true);
+  assert.throws(() => reopened.handlers['adjust-filter'](null, 'grayscale'), /Unknown filter action/);
 });
 
 test('saved warning thresholds are preserved when defaults change', async () => {
@@ -258,9 +260,8 @@ test('saturation warning settings reject invalid values and failed writes', asyn
   update(null, { saturationBrightnessThreshold: 100 });
   failWrites(new Error('disk full'));
   assert.throws(() => update(null, { saturationWarnings: true }), /disk full/);
-  assert.throws(() => handlers['adjust-filter'](null, 'grayscale'), /disk full/);
   assert.equal(handlers['get-settings']().saturationWarnings, false);
-  assert.equal(handlers['get-settings']().grayscale, true);
+  assert.equal('grayscale' in handlers['get-settings'](), false);
   assert.equal(handlers['get-settings']().saturationThreshold, 100);
   assert.equal(handlers['get-settings']().saturationBrightnessThreshold, 100);
 });

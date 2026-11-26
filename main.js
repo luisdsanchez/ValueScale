@@ -16,7 +16,6 @@ const DEFAULTS = {
   captureWindowName: '',
   crop: FULL_CROP,
   showQuickFilterButtons: true,
-  grayscale: true,
   valueWarnings: false,
   darkThreshold: 2,
   lightThreshold: 97,
@@ -51,6 +50,7 @@ function loadSettings() {
     const saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
     const { version, windowState: savedWindowState, ...savedSettings } = saved;
     delete savedSettings.shortcuts;
+    delete savedSettings.grayscale;
     delete savedSettings.showQuickFilterButtons;
     if (savedSettings.darkThreshold === 0) savedSettings.darkThreshold = 1;
     if (savedSettings.lightThreshold === 100) savedSettings.lightThreshold = 99;
@@ -466,7 +466,6 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('adjust-filter', (_e, action) => {
     const patch = {
-      grayscale: () => ({ grayscale: !settings.grayscale }),
       posterize: () => ({ posterize: !settings.posterize }),
       valueWarnings: () => ({ valueWarnings: !settings.valueWarnings }),
       saturationWarnings: () => ({ saturationWarnings: !settings.saturationWarnings }),
@@ -610,6 +609,7 @@ app.whenReady().then(() => {
   });
   ipcMain.on('set-settings', (_e, patch) => {
     settings = { ...settings, ...patch };
+    delete settings.grayscale;
     saveSettings();
     if (win) win.webContents.send('settings', settings);
   });
