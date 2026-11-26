@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setWarningSettings: (patch) => ipcRenderer.invoke('set-warning-settings', patch),
+  setEdgeSettings: (patch) => ipcRenderer.invoke('set-edge-settings', patch),
   setQuickFilterButtons: (visible) => ipcRenderer.invoke('set-quick-filter-buttons', visible),
   adjustFilter: (action) => ipcRenderer.invoke('adjust-filter', action),
   listCaptureWindows: () => ipcRenderer.invoke('list-capture-windows'),

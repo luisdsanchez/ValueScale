@@ -9,6 +9,15 @@ const PANEL_WIDTH = 320;
 const PANEL_COLLAPSED_HEIGHT = 450;
 const PANEL_EXPANDED_HEIGHT = 450;
 const FILTER_DEFAULTS = { levels: 6, brightness: 10, contrast: 1.43, posterize: true };
+const CHECKS = ['edgeDetection', 'warmCool', 'saturationWarnings', 'valueWarnings', 'posterize'];
+function withExclusiveChecks(current, patch) {
+  const next = { ...current, ...patch };
+  const selected = CHECKS.find((key) => patch[key] === true);
+  if (selected) {
+    for (const key of CHECKS) next[key] = key === selected;
+  }
+  return next;
+}
 app.setName('ValueScale');
 const DEFAULTS = {
   ...FILTER_DEFAULTS,
@@ -19,11 +28,14 @@ const DEFAULTS = {
   valueWarnings: false,
   darkThreshold: 2,
   lightThreshold: 97,
+  edgeDetection: false,
+  edgeSensitivity: 55,
+  warmCool: false,
   saturationWarnings: false,
   saturationThreshold: 85,
   saturationBrightnessThreshold: 10,
 };
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 9;
 let settings = { ...DEFAULTS };
 let windowState = null;
 let windowStateSaveTimer = null;
@@ -52,6 +64,7 @@ function loadSettings() {
     delete savedSettings.shortcuts;
     delete savedSettings.grayscale;
     delete savedSettings.showQuickFilterButtons;
+    Object.assign(savedSettings, withExclusiveChecks({}, savedSettings));
     if (savedSettings.darkThreshold === 0) savedSettings.darkThreshold = 1;
     if (savedSettings.lightThreshold === 100) savedSettings.lightThreshold = 99;
     windowState = validateWindowState(savedWindowState);
@@ -60,7 +73,7 @@ function loadSettings() {
       return;
     }
 
-    if (version === 5 || version === 4) {
+    if (version === 8 || version === 7 || version === 6 || version === 5 || version === 4) {
       settings = { ...DEFAULTS, ...savedSettings };
       saveSettings();
       return;
@@ -452,7 +465,30 @@ app.whenReady().then(() => {
     } else {
       throw new Error('Unknown warning setting.');
     }
-    const nextSettings = { ...settings, [key]: value };
+    const nextSettings = withExclusiveChecks(settings, { [key]: value });
+    writeSettings(nextSettings);
+    settings = nextSettings;
+    sendSettings();
+    return settings;
+  });
+  ipcMain.handle('set-edge-settings', (_e, patch) => {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new Error('Invalid edge settings.');
+    }
+    const keys = Object.keys(patch);
+    if (keys.length !== 1) throw new Error('Update one edge setting at a time.');
+    const key = keys[0];
+    const value = patch[key];
+    if (key === 'edgeDetection') {
+      if (typeof value !== 'boolean') throw new Error('Edge detection visibility must be a boolean.');
+    } else if (key === 'edgeSensitivity') {
+      if (!Number.isInteger(value) || value < 1 || value > 100) {
+        throw new Error('Edge sensitivity is out of range.');
+      }
+    } else {
+      throw new Error('Unknown edge setting.');
+    }
+    const nextSettings = withExclusiveChecks(settings, { [key]: value });
     writeSettings(nextSettings);
     settings = nextSettings;
     sendSettings();
@@ -469,11 +505,13 @@ app.whenReady().then(() => {
       posterize: () => ({ posterize: !settings.posterize }),
       valueWarnings: () => ({ valueWarnings: !settings.valueWarnings }),
       saturationWarnings: () => ({ saturationWarnings: !settings.saturationWarnings }),
+      edgeDetection: () => ({ edgeDetection: !settings.edgeDetection }),
+      warmCool: () => ({ warmCool: !settings.warmCool }),
       fewer: () => ({ levels: Math.max(2, settings.levels - 1) }),
       more: () => ({ levels: Math.min(10, settings.levels + 1) }),
     }[action];
     if (!patch) throw new Error('Unknown filter action.');
-    const nextSettings = { ...settings, ...patch() };
+    const nextSettings = withExclusiveChecks(settings, patch());
     writeSettings(nextSettings);
     settings = nextSettings;
     sendSettings();
@@ -608,10 +646,10 @@ app.whenReady().then(() => {
     if (cropSelector && !cropSelector.isDestroyed()) cropSelector.close();
   });
   ipcMain.on('set-settings', (_e, patch) => {
-    settings = { ...settings, ...patch };
+    settings = withExclusiveChecks(settings, patch);
     delete settings.grayscale;
     saveSettings();
-    if (win) win.webContents.send('settings', settings);
+    sendSettings();
   });
   ipcMain.on('drag-start', (_e, p) => { drag = { sx: p.x, sy: p.y, b: win.getBounds() }; });
   ipcMain.on('drag-move', (_e, p) => {

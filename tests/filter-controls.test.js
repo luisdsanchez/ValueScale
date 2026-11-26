@@ -14,7 +14,8 @@ async function loadMain(savedSettings = null) {
   class BrowserWindow {
     constructor(options) {
       this.bounds = { x: 0, y: 0, width: options.width, height: options.height, ...options };
-      this.webContents = { on() {}, once() {}, send() {} };
+      this.messages = [];
+      this.webContents = { on() {}, once() {}, send: (...args) => { this.messages.push(args); } };
       windows.push(this);
     }
     setAspectRatio() {}
@@ -124,6 +125,151 @@ test('filter buttons toggle posterize and bound gray-value levels', async () => 
   assert.equal(handlers['get-settings']().levels, 2);
 });
 
+test('gray-value controls reflect posterize visibility and retain level limits', () => {
+  const source = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const applySettings = source.match(/function applySettings\(s\) \{[\s\S]*?\n\}(?=\nwindow\.api\.onSettings)/)[0];
+  const element = () => ({
+    attributes: {},
+    dataset: {},
+    classList: { toggle(name, enabled) { this[name] = enabled; } },
+    setAttribute(name, value) { this.attributes[name] = value; },
+  });
+  const context = { settings: { showQuickFilterButtons: true } };
+  for (const name of ['quickAccess', 'quickFilterControls', 'quickAccessToggle', 'posterizeToggle',
+    'valueWarningsToggle', 'saturationWarningsToggle', 'edgeDetectionToggle', 'warmCoolToggle',
+    'saturationLegend', 'warmCoolLegend', 'valueCount', 'fewerValues', 'moreValues']) {
+    context[name] = element();
+  }
+  vm.runInNewContext(applySettings, context);
+  const settings = { showQuickFilterButtons: true, posterize: false, levels: 6 };
+  context.applySettings(settings);
+  assert.equal(context.fewerValues.disabled, true);
+  assert.equal(context.moreValues.disabled, true);
+  assert.equal(context.valueCount.classList.disabled, true);
+  assert.equal(context.valueCount.textContent, '4');
+  assert.match(context.valueCount.attributes['aria-label'], /posterize off/);
+  context.applySettings({ ...settings, posterize: true });
+  assert.equal(context.fewerValues.disabled, false);
+  assert.equal(context.moreValues.disabled, false);
+  assert.equal(context.valueCount.classList.disabled, false);
+  context.applySettings({ ...settings, posterize: true, levels: 2 });
+  assert.equal(context.fewerValues.disabled, true);
+  assert.equal(context.moreValues.disabled, false);
+  context.applySettings({ ...settings, posterize: true, levels: 10 });
+  assert.equal(context.fewerValues.disabled, false);
+  assert.equal(context.moreValues.disabled, true);
+});
+
+test('edge view defaults off and persists with its sensitivity', async () => {
+  const { handlers, writes } = await loadMain({ version: 6, brightness: 25, contrast: 2 });
+  assert.equal(handlers['get-settings']().edgeDetection, false);
+  assert.equal(handlers['get-settings']().edgeSensitivity, 55);
+  handlers['adjust-filter'](null, 'edgeDetection');
+  handlers['set-edge-settings'](null, { edgeSensitivity: 72 });
+  const reopened = await loadMain(writes.at(-1));
+  assert.equal(reopened.handlers['get-settings']().edgeDetection, true);
+  assert.equal(reopened.handlers['get-settings']().edgeSensitivity, 72);
+  assert.equal(reopened.handlers['get-settings']().brightness, 25);
+  assert.equal(reopened.handlers['get-settings']().contrast, 2);
+});
+
+test('warm/cool map replaces other checks and failed writes leave them unchanged', async () => {
+  const { handlers, writes, failWrites } = await loadMain({ version: 7, edgeDetection: true, saturationWarnings: true });
+  assert.equal(handlers['get-settings']().warmCool, false);
+  assert.equal(handlers['get-settings']().edgeDetection, true);
+  assert.equal(handlers['get-settings']().saturationWarnings, false);
+  failWrites(new Error('disk full'));
+  assert.throws(() => handlers['adjust-filter'](null, 'warmCool'), /disk full/);
+  assert.equal(handlers['get-settings']().warmCool, false);
+  assert.equal(handlers['get-settings']().edgeDetection, true);
+  failWrites(null);
+  handlers['adjust-filter'](null, 'warmCool');
+  const reopened = await loadMain(writes.at(-1));
+  assert.equal(reopened.handlers['get-settings']().warmCool, true);
+  assert.equal(reopened.handlers['get-settings']().edgeDetection, false);
+  assert.equal(reopened.handlers['get-settings']().saturationWarnings, false);
+  reopened.handlers['adjust-filter'](null, 'warmCool');
+  assert.equal(reopened.handlers['get-settings']().warmCool, false);
+});
+
+test('all checks replace one another and toggling the active check restores grayscale', async () => {
+  const { handlers, writes } = await loadMain();
+  const checks = ['posterize', 'edgeDetection', 'valueWarnings', 'saturationWarnings', 'warmCool'];
+  handlers['adjust-filter'](null, 'posterize');
+  for (const first of checks) {
+    for (const second of checks) {
+      if (first === second) continue;
+      handlers['adjust-filter'](null, first);
+      handlers['adjust-filter'](null, second);
+      for (const key of checks) assert.equal(handlers['get-settings']()[key], key === second);
+      handlers['adjust-filter'](null, second);
+      for (const key of checks) assert.equal(handlers['get-settings']()[key], false);
+    }
+  }
+  const reopened = await loadMain(writes.at(-1));
+  for (const key of checks) assert.equal(reopened.handlers['get-settings']()[key], false);
+});
+
+test('panel check updates are exclusive without changing thresholds or disabling another check when set false', async () => {
+  const { handlers, listeners, failWrites, windows } = await loadMain();
+  listeners['open-panel'](null, false);
+  handlers['set-warning-settings'](null, { darkThreshold: 10 });
+  handlers['adjust-filter'](null, 'warmCool');
+  handlers['set-warning-settings'](null, { valueWarnings: true });
+  assert.equal(handlers['get-settings']().warmCool, false);
+  assert.equal(handlers['get-settings']().valueWarnings, true);
+  handlers['set-edge-settings'](null, { edgeDetection: true });
+  assert.equal(handlers['get-settings']().valueWarnings, false);
+  handlers['set-warning-settings'](null, { saturationWarnings: false });
+  assert.equal(handlers['get-settings']().edgeDetection, true);
+  failWrites(new Error('disk full'));
+  assert.throws(() => handlers['set-warning-settings'](null, { saturationWarnings: true }), /disk full/);
+  assert.equal(handlers['get-settings']().edgeDetection, true);
+  assert.equal(handlers['get-settings']().saturationWarnings, false);
+  failWrites(null);
+  listeners['set-settings'](null, { saturationWarnings: true });
+  assert.equal(handlers['get-settings']().saturationWarnings, true);
+  assert.equal(handlers['get-settings']().edgeDetection, false);
+  assert.equal(handlers['get-settings']().darkThreshold, 10);
+  listeners['set-settings'](null, { posterize: true });
+  assert.equal(handlers['get-settings']().posterize, true);
+  assert.equal(handlers['get-settings']().saturationWarnings, false);
+  assert.equal(windows[1].messages.at(-1)[1].posterize, true);
+  assert.equal(windows[1].messages.at(-1)[1].saturationWarnings, false);
+});
+
+test('legacy simultaneous checks migrate to the previously visible view', async () => {
+  for (const [saved, expected] of [
+    [{ edgeDetection: true, warmCool: true, saturationWarnings: true, valueWarnings: true }, 'edgeDetection'],
+    [{ warmCool: true, saturationWarnings: true, valueWarnings: true }, 'warmCool'],
+    [{ saturationWarnings: true, valueWarnings: true }, 'saturationWarnings'],
+  ]) {
+    const { handlers, writes } = await loadMain({ version: 8, posterize: true, ...saved });
+    for (const key of ['edgeDetection', 'warmCool', 'saturationWarnings', 'valueWarnings', 'posterize']) {
+      assert.equal(handlers['get-settings']()[key], key === expected);
+    }
+    const reopened = await loadMain(writes.at(-1));
+    assert.equal(reopened.handlers['get-settings']()[expected], true);
+  }
+});
+
+test('edge settings reject invalid values without changing saved settings', async () => {
+  const { handlers, failWrites } = await loadMain();
+  const update = handlers['set-edge-settings'];
+  assert.throws(() => update(null, { edgeDetection: 1 }), /boolean/);
+  assert.throws(() => update(null, { edgeSensitivity: 0 }), /out of range/);
+  assert.throws(() => update(null, { edgeSensitivity: 101 }), /out of range/);
+  assert.throws(() => update(null, { edgeSensitivity: 1.5 }), /out of range/);
+  assert.throws(() => update(null, { edgeSensitivity: 40, edgeDetection: true }), /one edge setting/);
+  update(null, { edgeSensitivity: 1 });
+  update(null, { edgeSensitivity: 100 });
+  failWrites(new Error('disk full'));
+  assert.throws(() => update(null, { edgeDetection: true }), /disk full/);
+  assert.throws(() => handlers['adjust-filter'](null, 'edgeDetection'), /disk full/);
+  assert.equal(handlers['get-settings']().edgeDetection, false);
+  assert.equal(handlers['get-settings']().edgeSensitivity, 100);
+});
+
 test('capture pause handlers are no longer available', async () => {
   const { handlers } = await loadMain();
   assert.equal(handlers['toggle-freeze'], undefined);
@@ -226,7 +372,7 @@ test('grayscale stays enabled while saturation warnings and adjustments persist'
   const reopened = await loadMain(writes.at(-1));
   settings = reopened.handlers['get-settings']();
   assert.equal('grayscale' in settings, false);
-  assert.equal(settings.valueWarnings, true);
+  assert.equal(settings.valueWarnings, false);
   assert.equal(settings.saturationWarnings, true);
   assert.equal(settings.saturationThreshold, 65);
   assert.equal(settings.saturationBrightnessThreshold, 45);

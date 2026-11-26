@@ -67,15 +67,11 @@
   #quick-access-toggle svg { width: 12px; height: 12px; transition: transform 600ms ease-in-out; }
   .quick-access.collapsed #quick-access-toggle svg { transform: rotate(180deg); }
   .quick-filter-controls button[aria-pressed="true"] { background: var(--accent); color: var(--black); }
-  .quick-filter-controls button:disabled { opacity: 0.45; cursor: default; }
+  .quick-filter-controls button:disabled, .value-count.disabled { opacity: 0.45; cursor: default; }
   .quick-filter-stack svg, .window-controls svg { width: 14px; height: 14px; }
-  .quick-filter-controls .warning-button { padding: 0; }
-  .quick-filter-stack .warning-icon { width: 20px; height: 20px; }
-  .warning-icon text { fill: var(--surface); }
-  .quick-filter-controls button[aria-pressed="true"] .warning-icon text { fill: var(--accent); }
   .value-count { display: grid; width: 26px; height: 24px; place-items: center; border-radius: 4px; background: rgba(44, 44, 44, 0.94); color: var(--white); font: 12px "Segoe UI", sans-serif; }
   .quick-filter-controls button, .quick-filter-controls .value-count { width: 100%; }
-  #saturation-legend {
+  #saturation-legend, #warm-cool-legend {
     position: fixed;
     z-index: 2;
     bottom: 8px;
@@ -91,14 +87,19 @@
     pointer-events: none;
     transform: translateX(-50%);
   }
-  #saturation-legend[hidden] { display: none; }
-  .saturation-legend-gradient {
+  #saturation-legend[hidden], #warm-cool-legend[hidden] { display: none; }
+  .saturation-legend-gradient, .warm-cool-legend-gradient {
     flex: 1;
     min-width: 0;
     height: 5px;
     border-radius: 2px;
-    background: linear-gradient(to right, #000122 0%, #0C0074 12%, #4D00C1 25%, #EC000E 65%, #FF7D00 75%, #FFFC86 88%, #FFFFFF 100%);
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+  }
+  .saturation-legend-gradient {
+    background: linear-gradient(to right, #000122 0%, #0C0074 12%, #4D00C1 25%, #EC000E 65%, #FF7D00 75%, #FFFC86 88%, #FFFFFF 100%);
+  }
+  .warm-cool-legend-gradient {
+    background: linear-gradient(to right, #287bf5, #98a3b2, #ff700c);
   }
   #update-notification {
     position: fixed;
@@ -183,20 +184,22 @@
     .quick-filter-viewport { max-height: calc(100vh - 43px); }
     .quick-filter-stack { gap: 1px; }
     .quick-filter-controls button, .quick-filter-controls .value-count { height: 17px; }
-    .quick-filter-stack .warning-icon { width: 16px; height: 16px; }
     #quick-access-toggle { height: 14px; margin-top: 3px; }
   }
   @media (max-height: 241px) and (min-width: 360px) {
     .quick-access { top: 6px; right: 122px; width: auto; display: flex; align-items: center; gap: 6px; }
-    .quick-filter-viewport { display: block; flex: none; width: 200px; max-height: none; transition: width 600ms ease-in-out; }
-    .quick-filter-controls { width: 200px; overflow: hidden; }
-    .quick-filter-stack { flex-direction: row; align-items: center; }
+    .quick-filter-viewport { display: block; flex: none; width: min(229px, calc(100vw - 160px)); max-height: none; transition: width 600ms ease-in-out; }
+    .quick-filter-controls { width: 100%; overflow-x: auto; overflow-y: hidden; }
+    .quick-filter-stack { width: max-content; flex-direction: row; align-items: center; }
     .quick-filter-controls button, .quick-filter-controls .value-count { width: 26px; }
     #fewer-values { order: 1; }
     #value-count { order: 2; }
     #more-values { order: 3; }
-    #value-warnings-toggle { order: 4; }
-    #saturation-warnings-toggle { order: 5; }
+    #posterize-toggle { order: 4; }
+    #edge-detection-toggle { order: 5; }
+    #value-warnings-toggle { order: 6; }
+    #saturation-warnings-toggle { order: 7; }
+    #warm-cool-toggle { order: 8; }
     #quick-access-toggle { order: -1; flex: none; width: 26px; height: 24px; margin-top: 0; }
     #quick-access-toggle svg { transform: rotate(90deg); }
     .quick-access.collapsed #quick-access-toggle svg { transform: rotate(-90deg); }
@@ -269,6 +272,11 @@
   <span class="saturation-legend-gradient" aria-hidden="true"></span>
   <span aria-hidden="true">VIVID</span>
 </div>
+<div id="warm-cool-legend" role="img" aria-label="Temperature scale, cool to warm" hidden>
+  <span aria-hidden="true">COOL</span>
+  <span class="warm-cool-legend-gradient" aria-hidden="true"></span>
+  <span aria-hidden="true">WARM</span>
+</div>
 <div id="update-notification" role="status" aria-label="Update notification" hidden></div>
 <div id="capture-error" hidden></div>
 <div id="window-selection-prompt" role="dialog" hidden>
@@ -298,12 +306,14 @@
   <div class="quick-filter-viewport">
   <div id="quick-filter-controls" class="quick-filter-controls">
   <div class="quick-filter-stack">
-  <button id="posterize-toggle" class="quick-filter-button" type="button" aria-label="Toggle posterize" title="Toggle posterize" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="2" width="4" height="12" fill="currentColor" opacity=".35"/><rect x="6" y="2" width="4" height="12" fill="currentColor" opacity=".65"/><rect x="11" y="2" width="4" height="12" fill="currentColor"/></svg></button>
   <button id="more-values" class="quick-filter-button" type="button" aria-label="More gray values" title="More gray values"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M8 3v10"/></svg></button>
   <span id="value-count" class="quick-filter-button value-count" role="status" aria-label="Gray values: 4" title="Gray values (excluding black and white)">4</span>
   <button id="fewer-values" class="quick-filter-button" type="button" aria-label="Fewer gray values" title="Fewer gray values"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10"/></svg></button>
-  <button id="value-warnings-toggle" class="quick-filter-button warning-button" type="button" aria-label="Toggle value warnings" title="Toggle value warnings" aria-pressed="false"><svg class="warning-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.8 2.4Q8 .2 9.2 2.4L14.5 11.9Q15.8 14.5 13 14.5H3Q.2 14.5 1.5 11.9Z" fill="currentColor"/><text x="8" y="12" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="8" font-weight="900">V</text></svg></button>
-  <button id="saturation-warnings-toggle" class="quick-filter-button warning-button" type="button" aria-label="Toggle saturation warnings" title="Toggle saturation warnings" aria-pressed="false"><svg class="warning-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.8 2.4Q8 .2 9.2 2.4L14.5 11.9Q15.8 14.5 13 14.5H3Q.2 14.5 1.5 11.9Z" fill="currentColor"/><text x="8" y="12" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="8" font-weight="900">S</text></svg></button>
+  <button id="posterize-toggle" class="quick-filter-button" type="button" aria-label="Toggle posterize" title="Toggle posterize" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="2" width="4" height="12" fill="currentColor" opacity=".35"/><rect x="6" y="2" width="4" height="12" fill="currentColor" opacity=".65"/><rect x="11" y="2" width="4" height="12" fill="currentColor"/></svg></button>
+  <button id="edge-detection-toggle" class="quick-filter-button" type="button" aria-label="Toggle edge view" title="Toggle edge view" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2h12v12H2z" opacity=".5"/><path d="M9.5 2 6.5 5v3L9 10l-2 4"/></svg></button>
+  <button id="value-warnings-toggle" class="quick-filter-button" type="button" aria-label="Toggle value warnings" title="Toggle value warnings" aria-pressed="false"><svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="4" cy="8" r="2.7" fill="none"/><circle cx="12" cy="8" r="2.7" fill="currentColor"/></svg></button>
+  <button id="saturation-warnings-toggle" class="quick-filter-button" type="button" aria-label="Toggle saturation warnings" title="Toggle saturation warnings" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.5C6.5 4 3.5 7 3.5 9.5a4.5 4.5 0 0 0 9 0C12.5 7 9.5 4 8 1.5Z" fill="currentColor" fill-opacity=".35"/><path d="M6 9.5c0 1.1.9 2 2 2"/></svg></button>
+  <button id="warm-cool-toggle" class="quick-filter-button" type="button" aria-label="Toggle warm/cool map" title="Toggle warm/cool map" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 0 0 0 14Z" fill="currentColor" opacity=".45"/><path d="M8 1a7 7 0 0 1 0 14Z" fill="currentColor"/></svg></button>
   </div>
   </div>
   </div>
@@ -337,7 +347,31 @@ uniform float lightThreshold;
 uniform float saturationWarnings;
 uniform float saturationThreshold;
 uniform float saturationBrightnessThreshold;
+uniform float edgeDetection;
+uniform float edgeSensitivity;
+uniform float warmCool;
 uniform float pixelRatio;
+uniform vec2 sourceSize;
+uniform vec2 viewportSize;
+float luminanceAt(vec2 coord) {
+  vec2 halfTexel = min(0.5 / sourceSize, crop.zw * 0.5);
+  vec2 minCoord = crop.xy + halfTexel;
+  vec2 maxCoord = crop.xy + crop.zw - halfTexel;
+  vec3 sampleColor = texture2D(tex, clamp(coord, minCoord, maxCoord)).rgb;
+  return dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));
+}
+vec2 luminanceGradient(vec2 coord, vec2 texel) {
+  float tl = luminanceAt(coord + texel * vec2(-1.0, -1.0));
+  float tc = luminanceAt(coord + texel * vec2(0.0, -1.0));
+  float tr = luminanceAt(coord + texel * vec2(1.0, -1.0));
+  float ml = luminanceAt(coord + texel * vec2(-1.0, 0.0));
+  float mr = luminanceAt(coord + texel * vec2(1.0, 0.0));
+  float bl = luminanceAt(coord + texel * vec2(-1.0, 1.0));
+  float bc = luminanceAt(coord + texel * vec2(0.0, 1.0));
+  float br = luminanceAt(coord + texel * vec2(1.0, 1.0));
+  return vec2(-tl - 2.0 * ml - bl + tr + 2.0 * mr + br,
+              -tl - 2.0 * tc - tr + bl + 2.0 * bc + br) * 0.25;
+}
 vec3 warningOverlay(vec3 base, vec3 color, float direction, float stripeOpacity) {
   float stripe = 1.0 - step(6.0, mod((gl_FragCoord.x + direction * gl_FragCoord.y) / pixelRatio, 12.0));
   return mix(base, color, 0.1 + stripe * (stripeOpacity - 0.1));
@@ -365,14 +399,40 @@ void main() {
   float highest = max(c.r, max(c.g, c.b));
   float lowest = min(c.r, min(c.g, c.b));
   float saturation = highest > 0.0 ? (highest - lowest) / highest : 0.0;
-  if (saturationWarnings > 0.5 && highest > saturationBrightnessThreshold / 100.0) {
-    outputColor = saturationGradient(saturation);
-  }
-  if (valueWarnings > 0.5) {
-    if (grayscale <= darkThreshold) {
-      outputColor = warningOverlay(outputColor, vec3(0.35, 0.82, 1.0), 1.0, 0.4);
-    } else if (grayscale >= lightThreshold) {
-      outputColor = warningOverlay(outputColor, vec3(1.0, 0.62, 0.35), -1.0, 0.4);
+  if (edgeDetection > 0.5) {
+    vec2 texel = max(1.0 / sourceSize, crop.zw / viewportSize);
+    vec2 sourceCoord = crop.xy + uv * crop.zw;
+    vec2 gradient = luminanceGradient(sourceCoord, texel);
+    float edgeStrength = length(gradient);
+    vec2 direction = abs(gradient.y) <= abs(gradient.x) * 0.4142
+      ? vec2(1.0, 0.0)
+      : abs(gradient.x) <= abs(gradient.y) * 0.4142
+        ? vec2(0.0, 1.0)
+        : vec2(1.0, gradient.x * gradient.y >= 0.0 ? 1.0 : -1.0);
+    float before = length(luminanceGradient(sourceCoord - direction * texel, texel));
+    float after = length(luminanceGradient(sourceCoord + direction * texel, texel));
+    float threshold = (100.0 - edgeSensitivity) / 100.0 * 0.15 + 0.001;
+    // Break ties in one direction so a flat gradient peak becomes a single line.
+    float edge = edgeStrength >= before && edgeStrength > after
+      ? smoothstep(threshold, threshold + 0.15, edgeStrength) : 0.0;
+    outputColor = mix(vec3(0.26), vec3(1.0, 108.0 / 255.0, 56.0 / 255.0), edge);
+  } else {
+    if (warmCool > 0.5) {
+      float temperature = c.r - c.b;
+      vec3 neutral = vec3(152.0, 163.0, 178.0) / 255.0;
+      vec3 endpoint = temperature < 0.0
+        ? vec3(40.0, 123.0, 245.0) / 255.0
+        : vec3(255.0, 112.0, 12.0) / 255.0;
+      outputColor = mix(neutral, endpoint, min(abs(temperature) * 2.0, 1.0));
+    } else if (saturationWarnings > 0.5 && highest > saturationBrightnessThreshold / 100.0) {
+      outputColor = saturationGradient(saturation);
+    }
+    if (valueWarnings > 0.5) {
+      if (grayscale <= darkThreshold) {
+        outputColor = warningOverlay(outputColor, vec3(0.35, 0.82, 1.0), 1.0, 0.4);
+      } else if (grayscale >= lightThreshold) {
+        outputColor = warningOverlay(outputColor, vec3(1.0, 0.62, 0.35), -1.0, 0.4);
+      }
     }
   }
   gl_FragColor = vec4(outputColor, 1.0);
@@ -417,7 +477,12 @@ const U = {
   saturationWarnings: gl.getUniformLocation(prog, 'saturationWarnings'),
   saturationThreshold: gl.getUniformLocation(prog, 'saturationThreshold'),
   saturationBrightnessThreshold: gl.getUniformLocation(prog, 'saturationBrightnessThreshold'),
+  edgeDetection: gl.getUniformLocation(prog, 'edgeDetection'),
+  edgeSensitivity: gl.getUniformLocation(prog, 'edgeSensitivity'),
+  warmCool: gl.getUniformLocation(prog, 'warmCool'),
   pixelRatio: gl.getUniformLocation(prog, 'pixelRatio'),
+  sourceSize: gl.getUniformLocation(prog, 'sourceSize'),
+  viewportSize: gl.getUniformLocation(prog, 'viewportSize'),
 };
 
 const FULL_CROP = { x: 0, y: 0, w: 1, h: 1 };
@@ -433,6 +498,9 @@ let settings = {
   valueWarnings: false,
   darkThreshold: 2,
   lightThreshold: 97,
+  edgeDetection: false,
+  edgeSensitivity: 55,
+  warmCool: false,
   saturationWarnings: false,
   saturationThreshold: 85,
   saturationBrightnessThreshold: 10,
@@ -450,7 +518,10 @@ const quickTooltip = document.getElementById('quick-tooltip');
 const posterizeToggle = document.getElementById('posterize-toggle');
 const valueWarningsToggle = document.getElementById('value-warnings-toggle');
 const saturationWarningsToggle = document.getElementById('saturation-warnings-toggle');
+const edgeDetectionToggle = document.getElementById('edge-detection-toggle');
+const warmCoolToggle = document.getElementById('warm-cool-toggle');
 const saturationLegend = document.getElementById('saturation-legend');
+const warmCoolLegend = document.getElementById('warm-cool-legend');
 const fewerValues = document.getElementById('fewer-values');
 const valueCount = document.getElementById('value-count');
 const moreValues = document.getElementById('more-values');
@@ -569,9 +640,9 @@ function fitViewport() {
   let height = canvas.height;
 
   if (videoAspect > canvasAspect) {
-    height = Math.round(canvas.width / videoAspect);
+    height = Math.max(1, Math.round(canvas.width / videoAspect));
   } else {
-    width = Math.round(canvas.height * videoAspect);
+    width = Math.max(1, Math.round(canvas.height * videoAspect));
   }
 
   gl.viewport(
@@ -580,6 +651,7 @@ function fitViewport() {
     width,
     height
   );
+  return { width, height };
 }
 
 function updateProjectionAspectRatio() {
@@ -604,7 +676,7 @@ function frame() {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
     updateProjectionAspectRatio();
-    fitViewport();
+    const viewport = fitViewport();
     const crop = settings.crop;
     gl.uniform4f(U.crop, crop.x, crop.y, crop.w, crop.h);
     gl.uniform1f(U.levels, settings.levels);
@@ -617,7 +689,12 @@ function frame() {
     gl.uniform1f(U.saturationWarnings, settings.saturationWarnings ? 1 : 0);
     gl.uniform1f(U.saturationThreshold, settings.saturationThreshold / 100);
     gl.uniform1f(U.saturationBrightnessThreshold, settings.saturationBrightnessThreshold / 100);
+    gl.uniform1f(U.edgeDetection, settings.edgeDetection ? 1 : 0);
+    gl.uniform1f(U.edgeSensitivity, settings.edgeSensitivity);
+    gl.uniform1f(U.warmCool, settings.warmCool ? 1 : 0);
     gl.uniform1f(U.pixelRatio, window.devicePixelRatio || 1);
+    gl.uniform2f(U.sourceSize, video.videoWidth, video.videoHeight);
+    gl.uniform2f(U.viewportSize, viewport.width, viewport.height);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
   requestAnimationFrame(frame);
@@ -635,11 +712,15 @@ function applySettings(s) {
   posterizeToggle.setAttribute('aria-pressed', String(s.posterize));
   valueWarningsToggle.setAttribute('aria-pressed', String(s.valueWarnings));
   saturationWarningsToggle.setAttribute('aria-pressed', String(s.saturationWarnings));
-  saturationLegend.hidden = !s.saturationWarnings;
+  edgeDetectionToggle.setAttribute('aria-pressed', String(s.edgeDetection));
+  warmCoolToggle.setAttribute('aria-pressed', String(s.warmCool));
+  saturationLegend.hidden = !s.saturationWarnings || s.edgeDetection || s.warmCool;
+  warmCoolLegend.hidden = !s.warmCool || s.edgeDetection;
   valueCount.textContent = String(s.levels - 2);
-  valueCount.setAttribute('aria-label', `Gray values: ${s.levels - 2}`);
-  fewerValues.disabled = s.levels <= 2;
-  moreValues.disabled = s.levels >= 10;
+  valueCount.setAttribute('aria-label', `Gray values: ${s.levels - 2}${s.posterize ? '' : ' (posterize off)'}`);
+  valueCount.classList.toggle('disabled', !s.posterize);
+  fewerValues.disabled = !s.posterize || s.levels <= 2;
+  moreValues.disabled = !s.posterize || s.levels >= 10;
 }
 window.api.onSettings(applySettings);
 window.api.onCaptureTargetChanged(startStream);
@@ -739,6 +820,8 @@ for (const [button, action] of [
   [moreValues, 'more'],
   [valueWarningsToggle, 'valueWarnings'],
   [saturationWarningsToggle, 'saturationWarnings'],
+  [edgeDetectionToggle, 'edgeDetection'],
+  [warmCoolToggle, 'warmCool'],
 ]) {
   button.addEventListener('click', () => {
     window.api.adjustFilter(action).catch((error) => {

@@ -123,7 +123,24 @@
     </div>
   </div>
   <label class="toggle"><input id="posterize" type="checkbox"> Posterize</label>
+  <div id="posterize-error" class="error" role="alert" hidden></div>
   </div>
+  </section>
+  <section class="section" aria-labelledby="edge-detection-heading">
+  <h2 id="edge-detection-heading">Edge detection</h2>
+  <label class="toggle"><input id="edge-detection" type="checkbox"> Show edge view</label>
+  <div class="row">
+    <div class="label"><span>Sensitivity</span><span class="slider-value"><b id="edge-sensitivity-value"></b><button class="slider-reset" type="button" data-edge-setting="edgeSensitivity" aria-label="Reset edge sensitivity" title="Reset edge sensitivity">↻</button></span></div>
+    <div class="slider"><input id="edge-sensitivity" type="range" min="1" max="100" step="1" aria-label="Edge sensitivity"><span class="slider-tick-track"><span class="slider-tick" style="--default-position: 54.5%"></span></span></div>
+  </div>
+  <p class="note">Higher sensitivity reveals subtler edges. Edge view displays orange contours on gray.</p>
+  <div id="edge-error" class="error" role="alert" hidden></div>
+  </section>
+  <section class="section" aria-labelledby="warm-cool-heading">
+  <h2 id="warm-cool-heading">Warm/cool check</h2>
+  <label class="toggle"><input id="warm-cool" type="checkbox"> Show warm/cool map</label>
+  <p class="note">Maps the captured colors from cool blue through neutral gray to warm orange. Only one check can be active at a time.</p>
+  <div id="warm-cool-error" class="error" role="alert" hidden></div>
   </section>
   <section class="section" aria-labelledby="value-warnings-heading">
   <h2 id="value-warnings-heading">Value warnings</h2>
@@ -168,8 +185,15 @@ const els = {
   contrast: document.getElementById('contrast'),
 };
 const posterize = document.getElementById('posterize');
+const posterizeError = document.getElementById('posterize-error');
 const filterSettings = document.getElementById('filter-settings');
 const valueWarnings = document.getElementById('value-warnings');
+const edgeDetection = document.getElementById('edge-detection');
+const edgeSensitivity = document.getElementById('edge-sensitivity');
+const edgeSensitivityValue = document.getElementById('edge-sensitivity-value');
+const edgeError = document.getElementById('edge-error');
+const warmCool = document.getElementById('warm-cool');
+const warmCoolError = document.getElementById('warm-cool-error');
 const warningThresholds = {
   darkThreshold: document.getElementById('dark-threshold'),
   lightThreshold: document.getElementById('light-threshold'),
@@ -228,6 +252,10 @@ function show(s) {
   }
   posterize.checked = s.posterize;
   valueWarnings.checked = s.valueWarnings;
+  edgeDetection.checked = s.edgeDetection;
+  edgeSensitivity.value = s.edgeSensitivity;
+  edgeSensitivityValue.textContent = `${s.edgeSensitivity}%`;
+  warmCool.checked = s.warmCool;
   for (const key in warningThresholds) {
     warningThresholds[key].value = s[key];
     warningThresholdValues[key].textContent = `${s[key]}%`;
@@ -317,8 +345,15 @@ document.getElementById('reset-area').addEventListener('click', async () => {
     showError(error);
   }
 });
-posterize.addEventListener('change', () => {
-  window.api.setSettings({ posterize: posterize.checked });
+posterize.addEventListener('change', async () => {
+  posterizeError.hidden = true;
+  try {
+    await window.api.adjustFilter('posterize');
+  } catch (error) {
+    if (currentSettings) show(currentSettings);
+    posterizeError.textContent = error && error.message ? error.message : String(error);
+    posterizeError.hidden = false;
+  }
 });
 async function updateWarnings(patch) {
   warningError.hidden = true;
@@ -332,6 +367,40 @@ async function updateWarnings(patch) {
 }
 valueWarnings.addEventListener('change', () => {
   updateWarnings({ valueWarnings: valueWarnings.checked });
+});
+async function updateEdgeSettings(patch) {
+  edgeError.hidden = true;
+  try {
+    await window.api.setEdgeSettings(patch);
+  } catch (error) {
+    if (currentSettings) show(currentSettings);
+    edgeError.textContent = error && error.message ? error.message : String(error);
+    edgeError.hidden = false;
+  }
+}
+edgeDetection.addEventListener('change', () => {
+  updateEdgeSettings({ edgeDetection: edgeDetection.checked });
+});
+warmCool.addEventListener('change', async () => {
+  warmCoolError.hidden = true;
+  try {
+    await window.api.adjustFilter('warmCool');
+  } catch (error) {
+    if (currentSettings) show(currentSettings);
+    warmCoolError.textContent = error && error.message ? error.message : String(error);
+    warmCoolError.hidden = false;
+  }
+});
+document.querySelector('[data-edge-setting="edgeSensitivity"]').addEventListener('click', () => {
+  edgeSensitivity.value = 55;
+  edgeSensitivityValue.textContent = '55%';
+  updateEdgeSettings({ edgeSensitivity: 55 });
+});
+edgeSensitivity.addEventListener('input', () => {
+  edgeSensitivityValue.textContent = `${edgeSensitivity.value}%`;
+});
+edgeSensitivity.addEventListener('change', () => {
+  updateEdgeSettings({ edgeSensitivity: Number(edgeSensitivity.value) });
 });
 for (const key in warningThresholds) {
   const input = warningThresholds[key];
