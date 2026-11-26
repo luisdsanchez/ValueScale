@@ -13,7 +13,7 @@ Build the single-file portable Windows x64 executable on a Windows x64 build mac
     npm install
     npm run dist:portable
 
-The output is `dist\ValueScale_1.2.4.exe`. Copy that file to a Windows 10 or later x64 computer and run it; Node.js, npm, and a separate app installation are not required on the target computer. The portable `.exe` is Windows-only and is not compatible with macOS, Linux, or Windows ARM devices. Windows 7, 8, and 8.1 are not supported by this Electron version.
+The output is `dist\ValueScale_1.2.5.exe`. Copy that file to a Windows 10 or later x64 computer and run it; Node.js, npm, and a separate app installation are not required on the target computer. The portable `.exe` is Windows-only and is not compatible with macOS, Linux, or Windows ARM devices. Windows 7, 8, and 8.1 are not supported by this Electron version.
 
 For development, run `npm start` after installing dependencies.
 

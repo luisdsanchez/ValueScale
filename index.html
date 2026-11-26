@@ -442,6 +442,7 @@ const video = document.createElement('video');
 video.muted = true;
 const captureError = document.getElementById('capture-error');
 const windowSelectionPrompt = document.getElementById('window-selection-prompt');
+let updateAvailable = false;
 const quickAccess = document.querySelector('.quick-access');
 const quickAccessToggle = document.getElementById('quick-access-toggle');
 const quickFilterControls = document.getElementById('quick-filter-controls');
@@ -514,7 +515,7 @@ quickFilterControls.addEventListener('scroll', () => {
 addEventListener('resize', hideQuickTooltip);
 
 function showWindowSelectionPrompt() {
-  windowSelectionPrompt.hidden = false;
+  windowSelectionPrompt.hidden = updateAvailable;
   captureError.hidden = true;
 }
 
@@ -646,6 +647,8 @@ window.api.onCaptureTargetChanged(startStream);
 // Setup update notification handlers
 const updateNotification = document.getElementById('update-notification');
 window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
+  updateAvailable = true;
+  windowSelectionPrompt.hidden = true;
   const content = document.createElement('div');
   content.id = 'update-notification-content';
   content.innerHTML = `

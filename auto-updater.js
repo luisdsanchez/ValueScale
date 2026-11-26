@@ -3,7 +3,7 @@ const https = require('https');
 const semver = require('semver');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { spawn } = require('child_process');
 
 const OWNER = 'luisdsanchez';
 const REPO = 'ValueScale';
@@ -152,15 +152,22 @@ function installUpdate() {
   }
 
   try {
-    // Execute the installer
-    execFile(downloadedUpdatePath, ['--updated'], {
+    const installer = spawn(downloadedUpdatePath, ['--updated'], {
       detached: true,
+      stdio: 'ignore',
     });
 
-    // Quit and let the installer run
-    app.quit();
+    installer.once('error', (error) => {
+      console.error('Failed to launch update installer:', error);
+      dialog.showErrorBox('Update Error', `Failed to launch update installer: ${error.message}`);
+    });
+    installer.once('spawn', () => {
+      installer.unref();
+      app.quit();
+    });
   } catch (error) {
-    dialog.showErrorBox('Update Error', `Failed to install update: ${error.message}`);
+    console.error('Failed to launch update installer:', error);
+    dialog.showErrorBox('Update Error', `Failed to launch update installer: ${error.message}`);
   }
 }
 
