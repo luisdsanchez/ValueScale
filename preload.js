@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   onOpenWindowOptions: (cb) => ipcRenderer.on('open-window-options', cb),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_e, data) => cb(data)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', cb),
+  onUpdateDownloadFailed: (cb) => ipcRenderer.on('update-download-failed', cb),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setWarningSettings: (patch) => ipcRenderer.invoke('set-warning-settings', patch),

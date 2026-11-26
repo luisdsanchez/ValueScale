@@ -24,15 +24,17 @@ ValueScale now includes an automatic update feature that checks for new releases
 
 3. **Update Available**
    - If a newer version is found, a notification appears showing the new version number
-   - The notification provides two options: "Install Now" or "Later"
+   - The notification shows download progress and a "Later" option
 
 4. **Background Download**
    - The update starts downloading automatically in the background
    - Users can continue using the app while the download completes
+   - The update button is disabled until the download completes; failed downloads can be retried
 
-5. **Installation**
-   - Once downloaded, clicking "Install Now" launches the installer
-   - The app automatically restarts with the new version
+5. **Installing the update**
+   - Once downloaded, "Install & Restart" closes ValueScale and replaces its original portable executable
+   - The updated executable starts from the same location and keeps the original filename
+   - If replacement fails, an error is shown and the downloaded file remains available for manual installation
 
 ### File Structure
 
@@ -60,9 +62,9 @@ The `auto-updater.js` module provides the following key functions:
 - **`compareVersions(latestVersion, currentVersion)`** - Uses semver to safely compare versions
   - Returns `true` if an update is available
 
-- **`downloadUpdate(downloadUrl)`** - Downloads the installer to temp directory
-  - Handles HTTP redirects
-  - Saves to `%TEMP%/ValueScale-update.exe`
+- **`downloadUpdate(downloadUrl, expectedSize)`** - Downloads the portable executable to the temp directory
+  - Follows HTTPS redirects and checks HTTP status and download size
+  - Saves to a unique `%TEMP%\ValueScale-update-<pid>-<sequence>.exe` file
 
 - **`checkForUpdates()`** - Main check function
   - Fetches latest release
@@ -70,9 +72,9 @@ The `auto-updater.js` module provides the following key functions:
   - Downloads update if available
   - Sends notifications to renderer process
 
-- **`installUpdate()`** - Launches the installer
-  - Quits the app to allow installation to proceed
-  - The installer handles the rest
+- **`installUpdate()`** - Launches the downloaded portable executable
+  - Starts a Windows helper and quits the current app
+  - The helper waits for the app to close, atomically replaces the original portable executable, and restarts it
 
 #### IPC Handlers
 
@@ -87,7 +89,8 @@ The module exposes the following IPC handlers to the renderer process:
 - `update-available` - New update found
   - Payload: `{ version, releaseUrl, releaseNotes }`
 - `update-downloaded` - Update download complete
-  - Updates button text to "Install & Restart"
+  - Enables the "Install & Restart" button
+- `update-download-failed` - Update download failed; the notification offers a retry
 
 ### Integration Points
 
@@ -155,9 +158,9 @@ const REPO = 'your-repo-name';
 ### Download Location
 
 Updates are downloaded to:
-- `%TEMP%/ValueScale-update.exe`
+- `%TEMP%\ValueScale-update-<pid>-<sequence>.exe`
 
-This path is automatically cleaned up when the update is installed.
+Incomplete downloads are removed. A completed download is removed after successful replacement.
 
 ## Versioning
 
@@ -190,7 +193,7 @@ The auto-updater will automatically detect and prompt users to install the new v
 
 The auto-updater handles errors gracefully:
 
-- **Network errors** - Logged to console, doesn't crash the app
+- **Download errors** - Logged to console and shown in the notification with a retry option
 - **API errors** - Silently fails and retries on next scheduled check
 - **Invalid version formats** - Falls back to comparing against current version
 - **Missing downloads** - Shows error dialog if installation is attempted without downloaded file
@@ -210,13 +213,14 @@ The auto-updater handles errors gracefully:
 When an update is available, users see a centered overlay with:
 - "Update Available" title
 - Version number and message
-- Two buttons: "Install Now" and "Later"
+- A disabled download button and a "Later" button until the download finishes
 
 ### User Actions
 
-1. **Install Now** - Downloads (if not done) and installs immediately
+1. **Install & Restart** - Replaces the original portable executable and starts the updated app after the download finishes
 2. **Later** - Dismisses notification, can check again from GitHub releases page
 3. **Background** - Continues using the app while update downloads
+4. **Retry download** - Retries a failed download
 
 ## Troubleshooting
 

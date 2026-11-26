@@ -148,6 +148,7 @@
     font-weight: 600;
   }
   #install-update-btn:hover { background: #FF7D52; }
+  #install-update-btn:disabled { opacity: 0.5; cursor: default; }
   #dismiss-update-btn {
     background: rgba(255, 255, 255, 0.1);
     color: var(--white);
@@ -732,18 +733,46 @@ window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
   windowSelectionPrompt.hidden = true;
   const content = document.createElement('div');
   content.id = 'update-notification-content';
-  content.innerHTML = `
-    <div id="update-notification-title">Update Available</div>
-    <div>ValueScale ${version} is ready to install</div>
-  `;
+  const title = document.createElement('div');
+  title.id = 'update-notification-title';
+  title.textContent = 'Update Available';
+  const status = document.createElement('div');
+  status.id = 'update-notification-status';
+  status.textContent = `Downloading ValueScale ${version}...`;
+  content.append(title, status);
   const buttons = document.createElement('div');
   buttons.id = 'update-notification-buttons';
   
   const installBtn = document.createElement('button');
   installBtn.id = 'install-update-btn';
-  installBtn.textContent = 'Install Now';
-  installBtn.addEventListener('click', () => {
-    window.api.installUpdate();
+  installBtn.textContent = 'Downloading...';
+  installBtn.disabled = true;
+  installBtn.addEventListener('click', async () => {
+    installBtn.disabled = true;
+    if (installBtn.dataset.retry === 'true') {
+      status.textContent = `Downloading ValueScale ${version}...`;
+      installBtn.textContent = 'Downloading...';
+      try {
+        const available = await window.api.checkForUpdates();
+        if (!available) {
+          status.textContent = 'No update is currently available.';
+          installBtn.textContent = 'Check again';
+          installBtn.disabled = false;
+        }
+      } catch (error) {
+        console.error('Failed to retry the update:', error);
+        showUpdateDownloadFailure();
+      }
+    } else {
+      try {
+        await window.api.installUpdate();
+      } catch (error) {
+        console.error('Failed to install the update:', error);
+        status.textContent = 'Could not start the update. Please try again.';
+      } finally {
+        installBtn.disabled = false;
+      }
+    }
   });
   
   const dismissBtn = document.createElement('button');
@@ -764,10 +793,26 @@ window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
 
 window.api.onUpdateDownloaded(() => {
   const installBtn = document.getElementById('install-update-btn');
+  const status = document.getElementById('update-notification-status');
   if (installBtn) {
+    status.textContent = 'The update is ready to install.';
+    installBtn.dataset.retry = 'false';
     installBtn.textContent = 'Install & Restart';
+    installBtn.disabled = false;
   }
 });
+
+function showUpdateDownloadFailure() {
+  const installBtn = document.getElementById('install-update-btn');
+  const status = document.getElementById('update-notification-status');
+  if (installBtn) {
+    status.textContent = 'Could not download the update. Please try again.';
+    installBtn.dataset.retry = 'true';
+    installBtn.textContent = 'Retry download';
+    installBtn.disabled = false;
+  }
+}
+window.api.onUpdateDownloadFailed(showUpdateDownloadFailure);
 
 gl.clearColor(0, 0, 0, 1);
 window.api.getSettings()

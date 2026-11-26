@@ -1,6 +1,6 @@
 {
   "name": "valuescale",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Always-on-top grayscale projection for artists",
   "main": "main.js",
   "scripts": {
@@ -22,6 +22,7 @@
     "files": [
       "main.js",
       "auto-updater.js",
+      "portable-update.ps1",
       "preload.js",
       "index.html",
       "crop-selection.html",

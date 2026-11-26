@@ -2,7 +2,7 @@
 
 ## What's New
 
-ValueScale now automatically checks for updates when the app starts and periodically while it's running. Users will see a notification when a new version is available and can install it with one click.
+ValueScale checks for updates when the app starts and periodically while it's running. A notification appears when a new version is available.
 
 ## For End Users
 
@@ -11,12 +11,13 @@ ValueScale now automatically checks for updates when the app starts and periodic
 1. **Open ValueScale** - Updates are checked automatically
 2. **See the notification** - If a new version is available, you'll see a notification
 3. **Choose your action**:
-   - Click **"Install Now"** to download and install immediately
+   - Wait for the download to finish, then click **"Install & Restart"**
+   - If the download fails, click **"Retry download"**
    - Click **"Later"** to dismiss the notification
 
 ### That's It!
 
-The app will restart with the new version. No manual downloads or file management needed.
+The app closes, replaces its portable executable, and restarts from the same location. If replacement fails, an error identifies the downloaded file for manual installation.
 
 ## For Developers
 
@@ -77,7 +78,7 @@ Examples:
 
 1. Close any file explorer windows showing the temp folder
 2. Ensure you have admin rights to install
-3. Try again - the download will be cached
+3. Retry the download or download the portable executable from GitHub Releases
 
 ### I want to skip a version
 
