@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ValueScale Auto-Update - Test Preview</title>
+    <style>
+        :root { --surface: #2C2C2C; --accent: #FF6C38; --white: #f5f5f5; --black: #1a1a1a; }
+        html, body { margin: 0; height: 100%; overflow: hidden; background: var(--black); font-family: "Segoe UI", sans-serif; }
+        body { position: relative; display: flex; align-items: center; justify-content: center; }
+        
+        .test-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .instructions {
+            color: var(--white);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .instructions h1 {
+            margin: 0;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .instructions p {
+            margin: 0;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .test-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background: var(--accent);
+            color: var(--black);
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background-color 150ms ease;
+        }
+
+        .test-button:hover {
+            background: #FF7D52;
+        }
+
+        .test-button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--white);
+        }
+
+        .test-button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Update Notification Styles */
+        #update-notification {
+            position: fixed;
+            z-index: 3;
+            top: 50%;
+            left: 50%;
+            box-sizing: border-box;
+            max-width: calc(100vw - 32px);
+            padding: 16px;
+            border-radius: 8px;
+            background: rgba(44, 44, 44, 0.95);
+            color: var(--white);
+            font: 13px "Segoe UI", sans-serif;
+            text-align: center;
+            transform: translate(-50%, -50%);
+            animation: slideIn 300ms ease-out;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        #update-notification[hidden] { display: none; }
+
+        #update-notification-content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+        }
+
+        #update-notification-title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        #update-notification-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        #update-notification-buttons button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font: 12px "Segoe UI", sans-serif;
+            cursor: pointer;
+            transition: background-color 150ms ease;
+        }
+
+        #install-update-btn {
+            background: var(--accent);
+            color: var(--black);
+            font-weight: 600;
+        }
+
+        #install-update-btn:hover { background: #FF7D52; }
+
+        #dismiss-update-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--white);
+        }
+
+        #dismiss-update-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, calc(-50% - 20px));
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        .demo-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 500px;
+            color: var(--white);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .demo-box h3 {
+            margin-top: 0;
+            color: var(--accent);
+        }
+
+        .demo-box p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="instructions">
+            <h1>🚀 ValueScale Auto-Update - Test Preview</h1>
+            <p>Click a button below to see how the update notification looks</p>
+        </div>
+
+        <div class="button-group">
+            <button class="test-button" onclick="showUpdateNotification()">
+                Show Update Available
+            </button>
+            <button class="test-button secondary" onclick="showInstalledNotification()">
+                Show Update Downloaded
+            </button>
+            <button class="test-button secondary" onclick="hideNotification()">
+                Hide Notification
+            </button>
+            <button class="test-button secondary" onclick="showError()">
+                Show Error Message
+            </button>
+        </div>
+
+        <div class="demo-box">
+            <h3>What You're Seeing:</h3>
+            <p>• <strong>Update Available</strong> - Shows when a new version is found on GitHub</p>
+            <p>• <strong>Slide-in Animation</strong> - Smooth entrance effect (300ms)</p>
+            <p>• <strong>Orange Button</strong> - Theme matches ValueScale app</p>
+            <p>• <strong>Install Now</strong> - Downloads and installs the update</p>
+            <p>• <strong>Later</strong> - Dismisses notification until next restart</p>
+            <p><br/>This notification appears automatically when:</p>
+            <p>✓ User opens the app</p>
+            <p>✓ Periodic check detects new version (every hour)</p>
+            <p>✓ Manual check is triggered</p>
+        </div>
+    </div>
+
+    <div id="update-notification" hidden></div>
+
+    <script>
+        function showUpdateNotification() {
+            const notification = document.getElementById('update-notification');
+            const content = document.createElement('div');
+            content.id = 'update-notification-content';
+            content.innerHTML = `
+                <div id="update-notification-title">Update Available</div>
+                <div>ValueScale 1.2.3 is ready to install</div>
+                <p style="margin: 0; opacity: 0.7; font-size: 12px;">Current version: 1.2.2</p>
+            `;
+
+            const buttons = document.createElement('div');
+            buttons.id = 'update-notification-buttons';
+
+            const installBtn = document.createElement('button');
+            installBtn.id = 'install-update-btn';
+            installBtn.textContent = 'Install Now';
+            installBtn.onclick = () => {
+                installBtn.textContent = 'Installing...';
+                installBtn.disabled = true;
+                setTimeout(() => {
+                    alert('In the real app:\n1. Update would download from GitHub\n2. Installer would launch\n3. App would restart with new version');
+                    hideNotification();
+                }, 1500);
+            };
+
+            const dismissBtn = document.createElement('button');
+            dismissBtn.id = 'dismiss-update-btn';
+            dismissBtn.textContent = 'Later';
+            dismissBtn.onclick = hideNotification;
+
+            buttons.appendChild(installBtn);
+            buttons.appendChild(dismissBtn);
+            content.appendChild(buttons);
+
+            notification.textContent = '';
+            notification.appendChild(content);
+            notification.hidden = false;
+        }
+
+        function showInstalledNotification() {
+            const notification = document.getElementById('update-notification');
+            const content = document.createElement('div');
+            content.id = 'update-notification-content';
+            content.innerHTML = `
+                <div id="update-notification-title">✓ Update Ready</div>
+                <div>ValueScale 1.2.3 download complete</div>
+                <p style="margin: 0; opacity: 0.7; font-size: 12px;">Click Install to restart with new version</p>
+            `;
+
+            const buttons = document.createElement('div');
+            buttons.id = 'update-notification-buttons';
+
+            const installBtn = document.createElement('button');
+            installBtn.id = 'install-update-btn';
+            installBtn.textContent = 'Install & Restart';
+            installBtn.style.fontWeight = '700';
+            installBtn.onclick = () => {
+                alert('In the real app:\nApp would restart with version 1.2.3');
+                hideNotification();
+            };
+
+            const dismissBtn = document.createElement('button');
+            dismissBtn.id = 'dismiss-update-btn';
+            dismissBtn.textContent = 'Later';
+            dismissBtn.onclick = hideNotification;
+
+            buttons.appendChild(installBtn);
+            buttons.appendChild(dismissBtn);
+            content.appendChild(buttons);
+
+            notification.textContent = '';
+            notification.appendChild(content);
+            notification.hidden = false;
+        }
+
+        function showError() {
+            const notification = document.getElementById('update-notification');
+            const content = document.createElement('div');
+            content.id = 'update-notification-content';
+            content.innerHTML = `
+                <div id="update-notification-title">⚠️ Update Check Failed</div>
+                <div>Could not reach update server</div>
+                <p style="margin: 0; opacity: 0.7; font-size: 12px;">Will try again in 1 hour</p>
+            `;
+
+            const buttons = document.createElement('div');
+            buttons.id = 'update-notification-buttons';
+
+            const retryBtn = document.createElement('button');
+            retryBtn.id = 'install-update-btn';
+            retryBtn.textContent = 'Retry Now';
+            retryBtn.onclick = showUpdateNotification;
+
+            const dismissBtn = document.createElement('button');
+            dismissBtn.id = 'dismiss-update-btn';
+            dismissBtn.textContent = 'OK';
+            dismissBtn.onclick = hideNotification;
+
+            buttons.appendChild(retryBtn);
+            buttons.appendChild(dismissBtn);
+            content.appendChild(buttons);
+
+            notification.textContent = '';
+            notification.appendChild(content);
+            notification.hidden = false;
+        }
+
+        function hideNotification() {
+            document.getElementById('update-notification').hidden = true;
+        }
+    </script>
+</body>
+</html>
