@@ -1,0 +1,379 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ValueScale Controls</title>
+<style>
+  :root { --surface: #2C2C2C; --accent: #FF6C38; --white: #f5f5f5; --black: #1a1a1a; }
+  html, body { margin: 0; background: transparent; font: 12px -apple-system, "Segoe UI", sans-serif; color: var(--white); user-select: none; }
+  html, body { height: 100%; overflow: hidden; }
+  .card { position: relative; box-sizing: border-box; height: calc(100% - 8px); margin: 4px; padding-top: 14px; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border: 1px solid rgba(255, 108, 56, 0.35); border-radius: 10px; }
+  .settings-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 0 16px 12px; }
+  .settings-scroll::-webkit-scrollbar { width: 10px; }
+  .settings-scroll::-webkit-scrollbar-track { background: #242424; }
+  .settings-scroll::-webkit-scrollbar-thumb { background: var(--accent); border: 2px solid #242424; border-radius: 5px; }
+  .settings-scroll::-webkit-scrollbar-thumb:hover { background: #FF8651; }
+  .scroll-fade { position: absolute; z-index: 2; right: 10px; bottom: 0; left: 0; height: 90px; background: linear-gradient(to bottom, transparent, var(--surface)); pointer-events: none; }
+  .scroll-hint { position: absolute; z-index: 3; bottom: 8px; left: 50%; transform: translateX(-50%); padding: 5px 10px; border: 1px solid var(--accent); border-radius: 12px; background: var(--black); color: var(--white); font-weight: 600; white-space: nowrap; pointer-events: none; }
+  .scroll-hint span { color: var(--accent); }
+  .drag-handle { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; margin: 0 16px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.72); cursor: move; -webkit-app-region: drag; }
+  .drag-handle svg { width: 14px; height: 14px; color: var(--accent); }
+  .section { margin-bottom: 10px; padding: 11px 12px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 7px; background: #242424; }
+  .section h2 { margin: 0 0 10px; color: var(--white); font-size: 12px; font-weight: 600; }
+  .section > :last-child, #grayscale-settings > :last-child { margin-bottom: 0; }
+  .row { margin-bottom: 12px; }
+  .label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; color: rgba(255, 255, 255, 0.72); }
+  .label b { color: var(--accent); font-weight: 500; }
+  .slider-value { display: flex; align-items: center; gap: 5px; }
+  button.slider-reset { display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; color: rgba(255, 255, 255, 0.72); font: 16px/1 "Segoe UI Symbol", sans-serif; }
+  button.slider-reset:hover { background: rgba(255, 108, 56, 0.14); color: var(--accent); }
+  .slider { position: relative; height: 18px; }
+  input[type=range] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    appearance: none;
+    background: transparent;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--black); }
+  input[type=range]::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    appearance: none;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--black); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--accent); }
+  .slider-tick-track { position: absolute; z-index: 2; top: 50%; right: 7px; left: 7px; height: 12px; transform: translateY(-50%); pointer-events: none; }
+  .slider-tick { position: absolute; top: 3px; left: var(--default-position); width: 2px; height: 6px; border-radius: 1px; background: var(--white); transform: translateX(-50%); }
+  select { box-sizing: border-box; width: 100%; padding: 4px; border: 1px solid var(--black); border-radius: 4px; background: var(--black); color: var(--white); font: inherit; }
+  select:focus, button:focus-visible, input[type=range]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  .toggle { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--white); }
+  .toggle input { accent-color: var(--accent); }
+  #grayscale-settings.inactive { opacity: 0.5; }
+  button:disabled { cursor: default; }
+  .actions { display: flex; gap: 12px; margin: 6px 0; }
+  .actions button { padding: 4px 7px; border: 1px solid var(--black); border-radius: 4px; color: var(--white); }
+  .actions button:hover { background: var(--accent); color: var(--black); }
+  .note { margin: 4px 0 0; color: rgba(255, 255, 255, 0.55); font-size: 11px; line-height: 1.3; }
+  .error { margin: 0 0 10px; color: var(--accent); }
+  .window-options { margin-bottom: 10px; padding: 11px 12px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 7px; background: #242424; }
+  .window-options h2 { margin: 0 0 10px; color: var(--white); font-size: 12px; font-weight: 600; }
+  .foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; color: rgba(255, 255, 255, 0.55); font-size: 11px; }
+  button { background: none; border: none; color: rgba(255, 255, 255, 0.72); cursor: pointer; padding: 0; font: inherit; }
+  button:hover { color: var(--accent); }
+  #select-area { background: var(--accent); color: var(--black); font-weight: 600; }
+  #select-area:hover { background: #FF8651; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="drag-handle" title="Drag to move settings">
+    <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><circle cx="4" cy="2" r="1"/><circle cx="8" cy="2" r="1"/><circle cx="4" cy="6" r="1"/><circle cx="8" cy="6" r="1"/><circle cx="4" cy="10" r="1"/><circle cx="8" cy="10" r="1"/></svg>
+    <span>Settings · Drag to move</span>
+  </div>
+  <div class="settings-scroll">
+  <div class="settings-content">
+  <section id="window-options" class="window-options">
+    <h2>Window options</h2>
+    <div class="row">
+      <div class="label"><span>Window</span></div>
+      <select id="window-list"></select>
+      <div class="actions">
+        <button id="refresh-windows" type="button">Refresh</button>
+      </div>
+      <p class="note">Only the chosen window is captured; other floating windows are excluded.</p>
+    </div>
+    <div id="source-error" class="error" hidden></div>
+    <div class="row">
+      <div class="label"><span>Capture area</span></div>
+      <div class="actions">
+        <button id="select-area" type="button">Select capture area</button>
+        <button id="reset-area" type="button">Reset capture area</button>
+      </div>
+    </div>
+  </section>
+  <section class="section" aria-labelledby="grayscale-heading">
+  <h2 id="grayscale-heading">Grayscale</h2>
+  <label class="toggle"><input id="grayscale" type="checkbox"> Grayscale (off shows original color)</label>
+  <div id="filter-error" class="error" role="alert" hidden></div>
+  <div id="grayscale-settings">
+  <div class="row">
+    <div class="label"><span>Gray values</span><span class="slider-value"><b id="vl"></b><button class="slider-reset" type="button" data-setting="levels" aria-label="Reset gray values" title="Reset gray values">↻</button></span></div>
+    <div class="slider">
+      <input id="levels" type="range" min="0" max="8" step="1" aria-label="Gray values">
+      <span class="slider-tick-track"><span class="slider-tick" style="--default-position: 50%"></span></span>
+    </div>
+  </div>
+  <div class="row">
+    <div class="label"><span>Brightness</span><span class="slider-value"><b id="vb"></b><button class="slider-reset" type="button" data-setting="brightness" aria-label="Reset brightness" title="Reset brightness">↻</button></span></div>
+    <div class="slider">
+      <input id="brightness" type="range" min="-100" max="100" step="1" aria-label="Brightness adjustment">
+      <span class="slider-tick-track"><span class="slider-tick" style="--default-position: 50%"></span></span>
+    </div>
+  </div>
+  <div class="row">
+    <div class="label"><span>Contrast</span><span class="slider-value"><b id="vc"></b><button class="slider-reset" type="button" data-setting="contrast" aria-label="Reset contrast" title="Reset contrast">↻</button></span></div>
+    <div class="slider">
+      <input id="contrast" type="range" min="-100" max="100" step="1" aria-label="Contrast adjustment">
+      <span class="slider-tick-track"><span class="slider-tick" style="--default-position: 50%"></span></span>
+    </div>
+  </div>
+  <label class="toggle"><input id="posterize" type="checkbox"> Posterize</label>
+  </div>
+  </section>
+  <section class="section" aria-labelledby="value-warnings-heading">
+  <h2 id="value-warnings-heading">Value warnings</h2>
+  <label class="toggle"><input id="value-warnings" type="checkbox"> Show value warnings</label>
+  <div class="row">
+    <div class="label"><span>Dark warning (blue)</span><span class="slider-value"><b id="dark-threshold-value"></b><button class="slider-reset" type="button" data-warning-setting="darkThreshold" aria-label="Reset dark warning threshold" title="Reset dark warning threshold">↻</button></span></div>
+    <div class="slider"><input id="dark-threshold" type="range" min="1" max="49" step="1" aria-label="Dark warning threshold"><span class="slider-tick-track"><span class="slider-tick"></span></span></div>
+  </div>
+  <div class="row">
+    <div class="label"><span>Light warning (orange)</span><span class="slider-value"><b id="light-threshold-value"></b><button class="slider-reset" type="button" data-warning-setting="lightThreshold" aria-label="Reset light warning threshold" title="Reset light warning threshold">↻</button></span></div>
+    <div class="slider"><input id="light-threshold" type="range" min="51" max="99" step="1" aria-label="Light warning threshold"><span class="slider-tick-track"><span class="slider-tick"></span></span></div>
+  </div>
+  </section>
+  <div id="warning-error" class="error" role="alert" hidden></div>
+  <div class="foot">
+    <span id="app-version">ValueScale · Version unavailable</span>
+    <span>by LuisDiegoArt</span>
+  </div>
+  </div>
+  </div>
+  <div id="scroll-indicator" hidden>
+    <div class="scroll-fade" aria-hidden="true"></div>
+    <div class="scroll-hint">Scroll for more settings <span aria-hidden="true">↓</span></div>
+  </div>
+</div>
+<script>
+const settingsScroll = document.querySelector('.settings-scroll');
+const scrollIndicator = document.getElementById('scroll-indicator');
+function updateScrollHint() {
+  scrollIndicator.hidden = settingsScroll.scrollHeight - settingsScroll.clientHeight - settingsScroll.scrollTop <= 1;
+}
+settingsScroll.addEventListener('scroll', updateScrollHint, { passive: true });
+addEventListener('resize', updateScrollHint);
+const scrollObserver = new ResizeObserver(updateScrollHint);
+scrollObserver.observe(settingsScroll);
+scrollObserver.observe(document.querySelector('.settings-content'));
+updateScrollHint();
+
+const els = {
+  levels: document.getElementById('levels'),
+  brightness: document.getElementById('brightness'),
+  contrast: document.getElementById('contrast'),
+};
+const posterize = document.getElementById('posterize');
+const grayscale = document.getElementById('grayscale');
+const grayscaleSettings = document.getElementById('grayscale-settings');
+const filterError = document.getElementById('filter-error');
+const valueWarnings = document.getElementById('value-warnings');
+const warningThresholds = {
+  darkThreshold: document.getElementById('dark-threshold'),
+  lightThreshold: document.getElementById('light-threshold'),
+};
+const warningThresholdValues = {
+  darkThreshold: document.getElementById('dark-threshold-value'),
+  lightThreshold: document.getElementById('light-threshold-value'),
+};
+const warningThresholdDefaults = {
+  darkThreshold: 2,
+  lightThreshold: 97,
+};
+const warningError = document.getElementById('warning-error');
+const windowOptions = document.getElementById('window-options');
+const windowList = document.getElementById('window-list');
+const sourceError = document.getElementById('source-error');
+window.api.getAppVersion().then((version) => {
+  document.getElementById('app-version').textContent = `ValueScale v${version}`;
+}).catch((error) => {
+  console.error('Failed to retrieve app version:', error);
+});
+let currentSettings = null;
+const adjustmentRange = { min: -100, max: 100 };
+const settingRanges = {
+  brightness: { min: -100, neutral: 10, max: 100 },
+  contrast: { min: 0.5, neutral: 1.43, max: 3 },
+};
+const out = {
+  levels: document.getElementById('vl'),
+  brightness: document.getElementById('vb'),
+  contrast: document.getElementById('vc'),
+};
+function toAdjustment(key, value) {
+  const range = settingRanges[key];
+  const adjustment = value < range.neutral
+    ? (value - range.neutral) / (range.neutral - range.min) * 100
+    : (value - range.neutral) / (range.max - range.neutral) * 100;
+  return Math.round(Math.max(adjustmentRange.min, Math.min(adjustmentRange.max, adjustment)));
+}
+function toSetting(key, adjustment) {
+  const range = settingRanges[key];
+  const value = adjustment < 0
+    ? range.neutral + (adjustment / 100) * (range.neutral - range.min)
+    : range.neutral + (adjustment / 100) * (range.max - range.neutral);
+  return key === 'brightness' ? Math.round(value) : Math.round(value * 100) / 100;
+}
+function formatAdjustment(key, value) {
+  const formatted = value > 0 ? `+${value}` : value;
+  return key === 'brightness' ? `${formatted}%` : formatted;
+}
+function show(s) {
+  for (const k in els) {
+    const value = k === 'levels' ? s[k] - 2 : toAdjustment(k, s[k]);
+    els[k].value = value;
+    out[k].textContent = formatAdjustment(k, value);
+  }
+  posterize.checked = s.posterize;
+  grayscale.checked = s.grayscale;
+  grayscaleSettings.classList.toggle('inactive', !s.grayscale);
+  grayscaleSettings.querySelectorAll('input, button').forEach((element) => {
+    element.disabled = !s.grayscale;
+  });
+  valueWarnings.checked = s.valueWarnings;
+  for (const key in warningThresholds) {
+    warningThresholds[key].value = s[key];
+    warningThresholdValues[key].textContent = `${s[key]}%`;
+  }
+}
+function showError(error) {
+  sourceError.textContent = error && error.message ? error.message : String(error);
+  sourceError.hidden = false;
+}
+async function refreshWindows(selectedName) {
+  const windows = await window.api.listCaptureWindows();
+  windowList.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = windows.length ? 'Select an application window' : 'No application windows found';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  windowList.append(placeholder);
+  if (!windows.length) {
+    return;
+  }
+  for (const source of windows) {
+    const option = document.createElement('option');
+    option.value = source.id;
+    option.textContent = source.name;
+    windowList.append(option);
+  }
+  if (selectedName) {
+    const selected = windows.find((source) => source.name === selectedName);
+    if (selected) windowList.value = selected.id;
+  }
+}
+function applySettings(s) {
+  const sourceChanged = !currentSettings
+    || currentSettings.captureWindowName !== s.captureWindowName;
+  currentSettings = s;
+  show(s);
+  if (sourceChanged) refreshWindows(s.captureWindowName).catch(showError);
+}
+window.api.getSettings().then(applySettings).catch(showError);
+window.api.onSettings(applySettings);
+for (const k in els) {
+  els[k].addEventListener('input', () => {
+    const value = Number(els[k].value);
+    const setting = k === 'levels' ? value + 2 : toSetting(k, value);
+    out[k].textContent = formatAdjustment(k, value);
+    window.api.setSettings({ [k]: setting });
+  });
+}
+const sliderDefaults = { levels: 4, brightness: 0, contrast: 0 };
+document.querySelectorAll('#grayscale-settings .slider-reset').forEach((button) => {
+  button.addEventListener('click', () => {
+    const key = button.dataset.setting;
+    const value = sliderDefaults[key];
+    els[key].value = value;
+    out[key].textContent = formatAdjustment(key, value);
+    window.api.setSettings({ [key]: key === 'levels' ? value + 2 : toSetting(key, value) });
+  });
+});
+document.getElementById('refresh-windows').addEventListener('click', () => {
+  sourceError.hidden = true;
+  refreshWindows(currentSettings && currentSettings.captureWindowName).catch(showError);
+});
+windowList.addEventListener('change', async () => {
+  if (!windowList.value) return;
+  sourceError.hidden = true;
+  try {
+    await window.api.selectCaptureTarget({ type: 'window', id: windowList.value });
+  } catch (error) {
+    showError(error);
+  }
+});
+document.getElementById('select-area').addEventListener('click', async () => {
+  sourceError.hidden = true;
+  try {
+    await window.api.startCropSelection();
+    window.close();
+  } catch (error) {
+    showError(error);
+  }
+});
+document.getElementById('reset-area').addEventListener('click', async () => {
+  sourceError.hidden = true;
+  try {
+    await window.api.setCrop({ x: 0, y: 0, w: 1, h: 1 });
+  } catch (error) {
+    showError(error);
+  }
+});
+posterize.addEventListener('change', () => {
+  window.api.setSettings({ posterize: posterize.checked });
+});
+grayscale.addEventListener('change', async () => {
+  filterError.hidden = true;
+  grayscale.disabled = true;
+  try {
+    await window.api.adjustFilter('grayscale');
+  } catch (error) {
+    if (currentSettings) show(currentSettings);
+    filterError.textContent = error && error.message ? error.message : String(error);
+    filterError.hidden = false;
+  } finally {
+    grayscale.disabled = false;
+  }
+});
+async function updateWarnings(patch) {
+  warningError.hidden = true;
+  try {
+    await window.api.setWarningSettings(patch);
+  } catch (error) {
+    if (currentSettings) show(currentSettings);
+    warningError.textContent = error && error.message ? error.message : String(error);
+    warningError.hidden = false;
+  }
+}
+valueWarnings.addEventListener('change', () => {
+  updateWarnings({ valueWarnings: valueWarnings.checked });
+});
+for (const key in warningThresholds) {
+  const input = warningThresholds[key];
+  const defaultValue = warningThresholdDefaults[key];
+  const position = (defaultValue - Number(input.min)) / (Number(input.max) - Number(input.min)) * 100;
+  input.parentElement.querySelector('.slider-tick').style.setProperty('--default-position', `${position}%`);
+  document.querySelector(`[data-warning-setting="${key}"]`).addEventListener('click', () => {
+    input.value = defaultValue;
+    warningThresholdValues[key].textContent = `${defaultValue}%`;
+    updateWarnings({ [key]: defaultValue });
+  });
+  input.addEventListener('input', () => {
+    warningThresholdValues[key].textContent = `${input.value}%`;
+  });
+  input.addEventListener('change', () => {
+    updateWarnings({ [key]: Number(input.value) });
+  });
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
+</script>
+</body>
+</html>

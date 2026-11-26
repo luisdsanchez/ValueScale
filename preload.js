@@ -1,0 +1,28 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  onSettings: (cb) => ipcRenderer.on('settings', (_e, s) => cb(s)),
+  onCaptureTargetChanged: (cb) => ipcRenderer.on('capture-target-changed', cb),
+  onOpenWindowOptions: (cb) => ipcRenderer.on('open-window-options', cb),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setWarningSettings: (patch) => ipcRenderer.invoke('set-warning-settings', patch),
+  setQuickFilterButtons: (visible) => ipcRenderer.invoke('set-quick-filter-buttons', visible),
+  adjustFilter: (action) => ipcRenderer.invoke('adjust-filter', action),
+  listCaptureWindows: () => ipcRenderer.invoke('list-capture-windows'),
+  selectCaptureTarget: (target) => ipcRenderer.invoke('select-capture-target', target),
+  setCrop: (crop) => ipcRenderer.invoke('set-crop', crop),
+  setProjectionAspectRatio: (ratio) => ipcRenderer.invoke('set-projection-aspect-ratio', ratio),
+  setSettings: (patch) => ipcRenderer.send('set-settings', patch),
+  dragStart: (p) => ipcRenderer.send('drag-start', p),
+  dragMove: (p) => ipcRenderer.send('drag-move', p),
+  dragEnd: () => ipcRenderer.send('drag-end'),
+  openPanel: (expandWindowOptions = false) => ipcRenderer.send('open-panel', expandWindowOptions),
+  resizePanel: (expanded) => ipcRenderer.send('resize-panel', expanded),
+  startCropSelection: () => ipcRenderer.invoke('start-crop-selection'),
+  getCropSelectionBounds: () => ipcRenderer.invoke('get-crop-selection-bounds'),
+  finishCropSelection: () => ipcRenderer.invoke('finish-crop-selection'),
+  minimize: () => ipcRenderer.send('window-minimize'),
+  toggleMaximize: () => ipcRenderer.send('window-toggle-maximize'),
+  quit: () => ipcRenderer.send('quit'),
+});

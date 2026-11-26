@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ValueScale</title>
+<link rel="stylesheet" href="ui/styles.css">
+<link rel="stylesheet" href="ui/window-controls.css">
+<link rel="stylesheet" href="ui/quick-filter-controls.css">
+<link rel="stylesheet" href="ui/error-message.css">
+<link rel="stylesheet" href="ui/window-selection-prompt.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--black); }
+  body { position: relative; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<!-- Import UI Components -->
+<div id="capture-error" hidden></div>
+<div id="window-selection-prompt" role="dialog" hidden>
+  <div class="window-selection-card">
+    <button id="select-window" type="button">Choose a window to capture</button>
+  </div>
+</div>
+<div class="quick-filter-controls">
+  <button id="posterize-toggle" class="quick-filter-button" type="button" aria-label="Toggle posterize" title="Toggle posterize" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="2" width="4" height="12" fill="currentColor" opacity=".35"/><rect x="6" y="2" width="4" height="12" fill="currentColor" opacity=".65"/><rect x="11" y="2" width="4" height="12" fill="currentColor"/></svg></button>
+  <button id="fewer-values" class="quick-filter-button" type="button" aria-label="Fewer gray values" title="Fewer gray values"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+  <span id="value-count" class="quick-filter-button value-count" role="status" aria-label="Gray values: 4" title="Gray values (excluding black and white)">4</span>
+  <button id="more-values" class="quick-filter-button" type="button" aria-label="More gray values" title="More gray values"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M8 3v10"/></svg></button>
+</div>
+<div class="window-controls" aria-label="Window controls">
+  <button id="open-settings" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
+  <button id="minimize" type="button" aria-label="Minimize" title="Minimize"><span class="minimize-icon"></span></button>
+  <button id="maximize" type="button" aria-label="Maximize or restore" title="Maximize or restore"><span class="maximize-icon"></span></button>
+  <button id="close" class="close" type="button" aria-label="Close" title="Close"><span class="close-icon"></span></button>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', { antialias: false, alpha: false });
+
+const VS = `
+attribute vec2 p;
+varying vec2 uv;
+void main() {
+  uv = vec2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+  gl_Position = vec4(p, 0.0, 1.0);
+}`;
+
+const FS = `
+precision highp float;
+varying vec2 uv;
+uniform sampler2D tex;
+uniform vec4 crop;
+uniform float levels;
+uniform float bright;
+uniform float contrast;
+uniform float posterize;
+void main() {
+  vec3 c = texture2D(tex, crop.xy + uv * crop.zw).rgb;
+  float grayscale = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float adjusted = clamp((grayscale - 0.5) * contrast + 0.5 + bright / 100.0, 0.0, 1.0);
+  float q = min(floor(adjusted * levels), levels - 1.0) / (levels - 1.0);
+  float outputValue = posterize > 0.5 ? q : grayscale;
+  gl_FragColor = vec4(vec3(outputValue), 1.0);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'p');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+const tex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+const U = {
+  crop: gl.getUniformLocation(prog, 'crop'),
+  levels: gl.getUniformLocation(prog, 'levels'),
+  bright: gl.getUniformLocation(prog, 'bright'),
+  contrast: gl.getUniformLocation(prog, 'contrast'),
+  posterize: gl.getUniformLocation(prog, 'posterize'),
+};
+
+const FULL_CROP = { x: 0, y: 0, w: 1, h: 1 };
+let settings = {
+  levels: 6,
+  brightness: 10,
+  contrast: 1.43,
+  posterize: true,
+  captureType: 'window',
+  captureWindowName: '',
+  crop: FULL_CROP,
+  showQuickFilterButtons: true,
+};
+let projectionAspectRatio = null;
+const video = document.createElement('video');
+video.muted = true;
+const captureError = document.getElementById('capture-error');
+const windowSelectionPrompt = document.getElementById('window-selection-prompt');
+const posterizeToggle = document.getElementById('posterize-toggle');
+const fewerValues = document.getElementById('fewer-values');
+const valueCount = document.getElementById('value-count');
+const moreValues = document.getElementById('more-values');
+
+function showWindowSelectionPrompt() {
+  windowSelectionPrompt.hidden = false;
+  captureError.hidden = true;
+}
+
+async function startStream() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach((t) => t.stop());
+    video.srcObject = null;
+  }
+  if (!settings.captureWindowName) {
+    showWindowSelectionPrompt();
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 30, cursor: 'never' },
+      audio: false,
+    });
+    const track = stream.getVideoTracks()[0];
+    if (!track) throw new Error('Capture source returned no video track.');
+    video.srcObject = stream;
+    track.addEventListener('ended', () => {
+      if (video.srcObject !== stream) return;
+      showWindowSelectionPrompt();
+    });
+    await video.play();
+    windowSelectionPrompt.hidden = true;
+    captureError.hidden = true;
+  } catch (error) {
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      if (video.srcObject === stream) video.srcObject = null;
+    }
+    console.error('Failed to start window capture:', error);
+    showWindowSelectionPrompt();
+  }
+}
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(innerWidth * dpr));
+  canvas.height = Math.max(1, Math.round(innerHeight * dpr));
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function fitViewport() {
+  const canvasAspect = canvas.width / canvas.height;
+  const crop = settings.crop;
+  const videoAspect = (video.videoWidth * crop.w) / (video.videoHeight * crop.h);
+  let width = canvas.width;
+  let height = canvas.height;
+
+  if (videoAspect > canvasAspect) {
+    height = Math.round(canvas.width / videoAspect);
+  } else {
+    width = Math.round(canvas.height * videoAspect);
+  }
+
+  gl.viewport(
+    Math.floor((canvas.width - width) / 2),
+    Math.floor((canvas.height - height) / 2),
+    width,
+    height
+  );
+}
+
+function updateProjectionAspectRatio() {
+  if (!video.videoWidth || !video.videoHeight) return;
+  const crop = settings.crop;
+  const ratio = (video.videoWidth * crop.w) / (video.videoHeight * crop.h);
+  if (!Number.isFinite(ratio) || ratio <= 0 || ratio === projectionAspectRatio) return;
+  projectionAspectRatio = ratio;
+  window.api.setProjectionAspectRatio(ratio).catch((error) => {
+    console.error('Failed to fit the projection to the cropped source:', error);
+    captureError.textContent = 'Could not fit the projection to the capture area.';
+    captureError.hidden = false;
+  });
+}
+
+addEventListener('resize', resize);
+resize();
+
+function frame() {
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  if (video.readyState >= 2) {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    updateProjectionAspectRatio();
+    fitViewport();
+    const crop = settings.crop;
+    gl.uniform4f(U.crop, crop.x, crop.y, crop.w, crop.h);
+    gl.uniform1f(U.levels, settings.levels);
+    gl.uniform1f(U.bright, settings.brightness);
+    gl.uniform1f(U.contrast, settings.contrast);
+    gl.uniform1f(U.posterize, settings.posterize ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  requestAnimationFrame(frame);
+}
+
+function applySettings(s) {
+  settings = s;
+  document.querySelectorAll('.quick-filter-button').forEach((element) => {
+    element.hidden = !s.showQuickFilterButtons;
+  });
+  posterizeToggle.setAttribute('aria-pressed', String(s.posterize));
+  valueCount.textContent = String(s.levels - 2);
+  valueCount.setAttribute('aria-label', `Gray values: ${s.levels - 2}`);
+  fewerValues.disabled = s.levels <= 2;
+  moreValues.disabled = s.levels >= 10;
+}
+window.api.onSettings(applySettings);
+window.api.onCaptureTargetChanged(startStream);
+
+gl.clearColor(0, 0, 0, 1);
+window.api.getSettings()
+  .then((s) => { applySettings(s); return startStream(); })
+  .then(() => requestAnimationFrame(frame))
+  .catch((error) => {
+    console.error('Failed to load settings:', error);
+    captureError.textContent = 'Could not load app settings.';
+    captureError.hidden = false;
+  });
+
+let dragging = false;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  dragging = true;
+  canvas.setPointerCapture(e.pointerId);
+  window.api.dragStart({ x: e.screenX, y: e.screenY });
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (dragging) window.api.dragMove({ x: e.screenX, y: e.screenY });
+});
+canvas.addEventListener('pointerup', (e) => {
+  dragging = false;
+  window.api.dragEnd();
+});
+canvas.addEventListener('pointercancel', () => {
+  if (dragging) {
+    dragging = false;
+    window.api.dragEnd();
+  }
+});
+addEventListener('contextmenu', (e) => e.preventDefault());
+for (const [button, action] of [
+  [posterizeToggle, 'posterize'],
+  [fewerValues, 'fewer'],
+  [moreValues, 'more'],
+]) {
+  button.addEventListener('click', () => {
+    window.api.adjustFilter(action).catch((error) => {
+      console.error('Failed to adjust filter:', error);
+      captureError.textContent = 'Could not update the image adjustments.';
+      captureError.hidden = false;
+    });
+  });
+}
+document.getElementById('open-settings').addEventListener('click', () => window.api.openPanel());
+document.getElementById('minimize').addEventListener('click', () => window.api.minimize());
+document.getElementById('maximize').addEventListener('click', () => window.api.toggleMaximize());
+document.getElementById('close').addEventListener('click', () => window.api.quit());
+document.getElementById('select-window').addEventListener('click', () => window.api.openPanel(true));
+</script>
+</body>
+</html>
