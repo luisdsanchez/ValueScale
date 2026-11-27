@@ -117,6 +117,7 @@ test('the update notice opens GitHub, reports errors, and restores the capture p
   let opens = 0;
   let fail = true;
   let prompts = 0;
+  let projectionSource = null;
   const api = {
     onUpdateAvailable: (callback) => { handler = callback; },
     openUpdatePage: async () => { opens += 1; if (fail) throw new Error('browser unavailable'); },
@@ -125,7 +126,7 @@ test('the update notice opens GitHub, reports errors, and restores the capture p
     window: { api },
     document: { createElement: () => new Element(), getElementById: (id) => elements.get(id) },
     windowSelectionPrompt: { hidden: false },
-    video: { srcObject: null },
+    getProjectionSource: () => projectionSource,
     showWindowSelectionPrompt: () => { prompts += 1; },
     updateAvailable: false,
     console: { error() {} },
@@ -143,5 +144,9 @@ test('the update notice opens GitHub, reports errors, and restores the capture p
   assert.equal(opens, 2);
   elements.get('dismiss-update-btn').listeners.click();
   assert.equal(notification.hidden, true);
+  assert.equal(prompts, 1);
+  projectionSource = { element: {} };
+  handler({ version: '1.2.9' });
+  elements.get('dismiss-update-btn').listeners.click();
   assert.equal(prompts, 1);
 });

@@ -64,7 +64,7 @@ async function loadMain(savedSettings = null) {
     require: (name) => {
       if (name === 'electron') return { ...electron, clipboard, nativeImage };
       if (name === 'fs') return fakeFs;
-      if (name === './auto-updater') return { setupIpcHandlers() {}, startPeriodicCheck() {}, stopPeriodicCheck() {} };
+      if (name === require('path').join('test', 'auto-updater')) return { setupIpcHandlers() {}, startPeriodicCheck() {}, stopPeriodicCheck() {} };
       return require(name);
     },
     __dirname: 'test',
@@ -115,6 +115,7 @@ test('screenshots save the PNG selected by the projection and respect cancellati
 test('screenshot redraws the active filtered projection before encoding it', async () => {
   const source = fs.readFileSync(require.resolve('../index.html'), 'utf8');
   const screenshot = source.match(/async function saveScreenshot\(\) \{[\s\S]*?\n\}/)[0];
+  const sourceHelpers = source.match(/function getProjectionSource\(\) \{[\s\S]*?\n\}\n\nfunction getSourceCrop\(\) \{[\s\S]*?\n\}/)[0];
   const calls = [];
   const track = { readyState: 'live' };
   const mockGl = {
@@ -135,7 +136,7 @@ test('screenshot redraws the active filtered projection before encoding it', asy
     createTexture: () => ({}),
     bindTexture: () => {},
     texParameteri: () => {},
-    texImage2D: () => {},
+    texImage2D: (...args) => calls.push(['texture', args[5]]),
     getUniformLocation: () => ({}),
     uniform1i: () => {},
     uniform4f: () => {},
@@ -148,6 +149,8 @@ test('screenshot redraws the active filtered projection before encoding it', asy
   };
   const context = {
     video: { srcObject: { getVideoTracks: () => [track] }, readyState: 2, videoWidth: 1920, videoHeight: 1080 },
+    loadedImage: null,
+    FULL_CROP: { x: 0, y: 0, w: 1, h: 1 },
     settings: { crop: { x: 0, y: 0, w: 1, h: 1 }, posterize: false, brightness: 0, contrast: 1, 
       valueWarnings: false, darkThreshold: 2, lightThreshold: 97, saturationWarnings: false,
       saturationThreshold: 85, saturationBrightnessThreshold: 10, edgeDetection: false,
@@ -171,7 +174,7 @@ test('screenshot redraws the active filtered projection before encoding it', asy
     VS: 'dummy',
     FS: 'dummy',
   };
-  vm.runInNewContext(screenshot, context);
+  vm.runInNewContext(sourceHelpers + '\n' + screenshot, context);
   await context.saveScreenshot();
   assert(calls.includes('toBlob'), 'Should create blob at full resolution');
   assert(calls.some(c => Array.isArray(c) && c.length === 2), 'Should copy bytes to clipboard');
@@ -180,6 +183,64 @@ test('screenshot redraws the active filtered projection before encoding it', asy
   track.readyState = 'live';
   context.video.videoWidth = 0;
   await assert.rejects(context.saveScreenshot(), /dimensions/);
+  const image = { naturalWidth: 640, naturalHeight: 480 };
+  context.loadedImage = image;
+  await context.saveScreenshot();
+  assert(calls.some(call => Array.isArray(call) && call[0] === 'texture' && call[1] === image));
+});
+
+test('opening an image keeps it as the source, ignores window crop, and releases its URL', async () => {
+  const source = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const functions = source.match(/function getProjectionSource\(\) \{[\s\S]*?\n\}\n\nfunction getSourceCrop\(\) \{[\s\S]*?\n\}\n\nasync function openImage\(file\) \{[\s\S]*?\n\}/)[0];
+  const images = [];
+  const revoked = [];
+  let stopped = 0;
+  const context = {
+    loadedImage: null,
+    sourceRequest: 0,
+    FULL_CROP: { x: 0, y: 0, w: 1, h: 1 },
+    settings: { crop: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 } },
+    video: { srcObject: { getTracks: () => [{ stop: () => stopped++ }] } },
+    discardImageButton: { hidden: true },
+    windowSelectionPrompt: { hidden: false },
+    captureError: { hidden: false },
+    gl: { MAX_TEXTURE_SIZE: 1, getParameter: () => 4096 },
+    URL: { createObjectURL: () => 'blob:test', revokeObjectURL: url => revoked.push(url) },
+    Image: class { constructor() { images.push(this); } },
+  };
+  vm.runInNewContext(functions, context);
+  const opening = context.openImage({});
+  images[0].naturalWidth = 800;
+  images[0].naturalHeight = 600;
+  images[0].onload();
+  await opening;
+  assert.equal(stopped, 1);
+  assert.equal(context.video.srcObject, null);
+  assert.equal(context.getProjectionSource().element, images[0]);
+  assert.equal(context.getSourceCrop(), context.FULL_CROP);
+  assert.equal(context.discardImageButton.hidden, false);
+  assert.equal(context.windowSelectionPrompt.hidden, true);
+  assert.deepEqual(revoked, ['blob:test']);
+
+  const failed = context.openImage({});
+  images[1].onerror();
+  await assert.rejects(failed, /Could not open/);
+  assert.equal(context.getProjectionSource().element, images[0]);
+  assert.equal(revoked.length, 2);
+
+  const oversized = context.openImage({});
+  images[2].naturalWidth = 4097;
+  images[2].naturalHeight = 100;
+  images[2].onload();
+  await assert.rejects(oversized, /too large/);
+  assert.equal(context.getProjectionSource().element, images[0]);
+
+  const stale = context.openImage({});
+  context.sourceRequest++;
+  images[3].onload();
+  await stale;
+  assert.equal(context.getProjectionSource().element, images[0]);
+  assert.equal(revoked.length, 4);
 });
 
 test('settings panel centers initially, preserves its position on resize, and stays onscreen', async () => {
