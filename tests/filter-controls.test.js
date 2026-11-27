@@ -292,6 +292,31 @@ test('older shortcut settings are ignored without changing image adjustments', a
   assert.equal(settings.brightness, 25);
 });
 
+test('out-of-range brightness from repeated legacy migrations is recovered and persisted', async () => {
+  for (const [saved, expected] of [[1000000000, 10], [-250000, -25], [1234, 10]]) {
+    const { handlers, writes } = await loadMain({ version: 9, brightness: saved, levels: 8, contrast: 1.43 });
+    const settings = handlers['get-settings']();
+    assert.equal(settings.brightness, expected);
+    assert.equal(settings.levels, 8);
+    assert.equal(settings.contrast, 1.43);
+    assert.equal(writes.at(-1).brightness, expected);
+    const reopened = await loadMain(writes.at(-1));
+    assert.equal(reopened.handlers['get-settings']().brightness, expected);
+  }
+});
+
+test('newer settings versions do not receive the legacy brightness conversion', async () => {
+  const { handlers, writes } = await loadMain({ version: 10, brightness: 25 });
+  assert.equal(handlers['get-settings']().brightness, 25);
+  assert.equal(writes.length, 0);
+});
+
+test('unversioned legacy brightness is still converted to percent', async () => {
+  const { handlers, writes } = await loadMain({ brightness: 0.25 });
+  assert.equal(handlers['get-settings']().brightness, 25);
+  assert.equal(writes.at(-1).brightness, 25);
+});
+
 test('quick filter buttons start visible even after they were hidden', async () => {
   const { handlers, writes } = await loadMain({ version: 6, levels: 4, showQuickFilterButtons: false });
   assert.equal(handlers['get-settings']().showQuickFilterButtons, true);

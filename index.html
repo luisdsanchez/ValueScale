@@ -728,7 +728,7 @@ window.api.onCaptureTargetChanged(startStream);
 
 // Setup update notification handlers
 const updateNotification = document.getElementById('update-notification');
-window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
+window.api.onUpdateAvailable(({ version }) => {
   updateAvailable = true;
   windowSelectionPrompt.hidden = true;
   const content = document.createElement('div');
@@ -738,40 +738,23 @@ window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
   title.textContent = 'Update Available';
   const status = document.createElement('div');
   status.id = 'update-notification-status';
-  status.textContent = `Downloading ValueScale ${version}...`;
+  status.textContent = `ValueScale ${version} is available on GitHub.`;
   content.append(title, status);
   const buttons = document.createElement('div');
   buttons.id = 'update-notification-buttons';
   
   const installBtn = document.createElement('button');
   installBtn.id = 'install-update-btn';
-  installBtn.textContent = 'Downloading...';
-  installBtn.disabled = true;
+  installBtn.textContent = 'Open GitHub';
   installBtn.addEventListener('click', async () => {
     installBtn.disabled = true;
-    if (installBtn.dataset.retry === 'true') {
-      status.textContent = `Downloading ValueScale ${version}...`;
-      installBtn.textContent = 'Downloading...';
-      try {
-        const available = await window.api.checkForUpdates();
-        if (!available) {
-          status.textContent = 'No update is currently available.';
-          installBtn.textContent = 'Check again';
-          installBtn.disabled = false;
-        }
-      } catch (error) {
-        console.error('Failed to retry the update:', error);
-        showUpdateDownloadFailure();
-      }
-    } else {
-      try {
-        await window.api.installUpdate();
-      } catch (error) {
-        console.error('Failed to install the update:', error);
-        status.textContent = 'Could not start the update. Please try again.';
-      } finally {
-        installBtn.disabled = false;
-      }
+    try {
+      await window.api.openUpdatePage();
+    } catch (error) {
+      console.error('Failed to open the update page:', error);
+      status.textContent = 'Could not open GitHub. Please try again.';
+    } finally {
+      installBtn.disabled = false;
     }
   });
   
@@ -779,7 +762,9 @@ window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
   dismissBtn.id = 'dismiss-update-btn';
   dismissBtn.textContent = 'Later';
   dismissBtn.addEventListener('click', () => {
+    updateAvailable = false;
     updateNotification.hidden = true;
+    if (!video.srcObject) showWindowSelectionPrompt();
   });
   
   buttons.appendChild(installBtn);
@@ -790,29 +775,6 @@ window.api.onUpdateAvailable(({ version, releaseUrl, releaseNotes }) => {
   updateNotification.appendChild(content);
   updateNotification.hidden = false;
 });
-
-window.api.onUpdateDownloaded(() => {
-  const installBtn = document.getElementById('install-update-btn');
-  const status = document.getElementById('update-notification-status');
-  if (installBtn) {
-    status.textContent = 'The update is ready to install.';
-    installBtn.dataset.retry = 'false';
-    installBtn.textContent = 'Install & Restart';
-    installBtn.disabled = false;
-  }
-});
-
-function showUpdateDownloadFailure() {
-  const installBtn = document.getElementById('install-update-btn');
-  const status = document.getElementById('update-notification-status');
-  if (installBtn) {
-    status.textContent = 'Could not download the update. Please try again.';
-    installBtn.dataset.retry = 'true';
-    installBtn.textContent = 'Retry download';
-    installBtn.disabled = false;
-  }
-}
-window.api.onUpdateDownloadFailed(showUpdateDownloadFailure);
 
 gl.clearColor(0, 0, 0, 1);
 window.api.getSettings()

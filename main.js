@@ -68,23 +68,6 @@ function loadSettings() {
     if (savedSettings.darkThreshold === 0) savedSettings.darkThreshold = 1;
     if (savedSettings.lightThreshold === 100) savedSettings.lightThreshold = 99;
     windowState = validateWindowState(savedWindowState);
-    if (version === SETTINGS_VERSION) {
-      settings = { ...DEFAULTS, ...savedSettings };
-      return;
-    }
-
-    if (version === 8 || version === 7 || version === 6 || version === 5 || version === 4) {
-      settings = { ...DEFAULTS, ...savedSettings };
-      saveSettings();
-      return;
-    }
-
-    if (version === 3) {
-      settings = { ...DEFAULTS, ...savedSettings };
-      saveSettings();
-      return;
-    }
-
     if (version === 2) {
       const oldDefault = savedSettings.levels === 4
         && savedSettings.brightness === 10
@@ -92,23 +75,34 @@ function loadSettings() {
       settings = oldDefault
         ? { ...DEFAULTS }
         : { ...DEFAULTS, ...savedSettings };
-      saveSettings();
-      return;
+    } else if (version === undefined || version === 0 || version === 1) {
+      const oldDefault = savedSettings.levels === 4
+        && savedSettings.brightness === 0
+        && savedSettings.contrast === 1;
+      settings = {
+        ...DEFAULTS,
+        ...savedSettings,
+        brightness: oldDefault
+          ? DEFAULTS.brightness
+          : Number.isFinite(savedSettings.brightness)
+            ? Math.round(savedSettings.brightness * 100)
+            : DEFAULTS.brightness,
+      };
+    } else {
+      settings = { ...DEFAULTS, ...savedSettings };
     }
 
-    const oldDefault = savedSettings.levels === 4
-      && savedSettings.brightness === 0
-      && savedSettings.contrast === 1;
-    settings = {
-      ...DEFAULTS,
-      ...savedSettings,
-      brightness: oldDefault
-        ? DEFAULTS.brightness
-        : Number.isFinite(savedSettings.brightness)
-          ? Math.round(savedSettings.brightness * 100)
-          : DEFAULTS.brightness,
-    };
-    saveSettings();
+    let brightness = settings.brightness;
+    while (Number.isSafeInteger(brightness) && Math.abs(brightness) > 100 && brightness % 100 === 0) {
+      brightness /= 100;
+    }
+    if (!Number.isInteger(brightness) || brightness < -100 || brightness > 100) brightness = DEFAULTS.brightness;
+    const repairedBrightness = brightness !== settings.brightness;
+    if (repairedBrightness) {
+      console.warn('Invalid saved brightness was repaired:', settings.brightness, '->', brightness);
+      settings.brightness = brightness;
+    }
+    if ((version !== SETTINGS_VERSION && !(version > SETTINGS_VERSION)) || repairedBrightness) saveSettings();
   } catch {}
 }
 function writeSettings(nextSettings) {
@@ -121,7 +115,7 @@ function writeSettings(nextSettings) {
   }));
 }
 function saveSettings() {
-  try { writeSettings(settings); } catch {}
+  try { writeSettings(settings); } catch (error) { console.error('Failed to save settings:', error); }
 }
 
 let win = null;
