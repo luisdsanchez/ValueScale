@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, screen, desktopCapturer, session, dialog, c
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const autoUpdater = require('./auto-updater');
+const autoUpdater = require(path.join(__dirname, 'auto-updater'));
 
 const FULL_CROP = { x: 0, y: 0, w: 1, h: 1 };
 const PANEL_WIDTH = 320;
