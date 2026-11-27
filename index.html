@@ -96,7 +96,7 @@
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
   }
   .saturation-legend-gradient {
-    background: linear-gradient(to right, #000122 0%, #0C0074 12%, #4D00C1 25%, #EC000E 65%, #FF7D00 75%, #FFFC86 88%, #FFFFFF 100%);
+    background: linear-gradient(to right, #000122 0%, #0C0074 10.2%, #4D00C1 23.4%, #EC000E 41.8%, #FF7D00 53.7%, #FFFC86 76.6%, #FFFFFF 100%);
   }
   .warm-cool-legend-gradient {
     background: linear-gradient(to right, #287bf5, #98a3b2, #ff700c);
@@ -413,17 +413,17 @@ vec3 warningOverlay(vec3 base, vec3 color, float direction, float stripeOpacity)
   return mix(base, color, 0.1 + stripe * (stripeOpacity - 0.1));
 }
 vec3 saturationGradient(float saturation) {
-  if (saturation < 0.12)
-    return mix(vec3(0.0, 1.0, 34.0), vec3(12.0, 0.0, 116.0), saturation / 0.12) / 255.0;
-  if (saturation < 0.25)
-    return mix(vec3(12.0, 0.0, 116.0), vec3(77.0, 0.0, 193.0), (saturation - 0.12) / 0.13) / 255.0;
-  if (saturation < 0.65)
-    return mix(vec3(77.0, 0.0, 193.0), vec3(236.0, 0.0, 14.0), (saturation - 0.25) / 0.40) / 255.0;
-  if (saturation < 0.75)
-    return mix(vec3(236.0, 0.0, 14.0), vec3(255.0, 125.0, 0.0), (saturation - 0.65) / 0.10) / 255.0;
-  if (saturation < 0.88)
-    return mix(vec3(255.0, 125.0, 0.0), vec3(255.0, 252.0, 134.0), (saturation - 0.75) / 0.13) / 255.0;
-  return mix(vec3(255.0, 252.0, 134.0), vec3(255.0), (saturation - 0.88) / 0.12) / 255.0;
+  if (saturation < 0.102)
+    return mix(vec3(0.0, 1.0, 34.0), vec3(12.0, 0.0, 116.0), saturation / 0.102) / 255.0;
+  if (saturation < 0.234)
+    return mix(vec3(12.0, 0.0, 116.0), vec3(77.0, 0.0, 193.0), (saturation - 0.102) / 0.132) / 255.0;
+  if (saturation < 0.418)
+    return mix(vec3(77.0, 0.0, 193.0), vec3(236.0, 0.0, 14.0), (saturation - 0.234) / 0.184) / 255.0;
+  if (saturation < 0.537)
+    return mix(vec3(236.0, 0.0, 14.0), vec3(255.0, 125.0, 0.0), (saturation - 0.418) / 0.119) / 255.0;
+  if (saturation < 0.766)
+    return mix(vec3(255.0, 125.0, 0.0), vec3(255.0, 252.0, 134.0), (saturation - 0.537) / 0.229) / 255.0;
+  return mix(vec3(255.0, 252.0, 134.0), vec3(255.0), (saturation - 0.766) / 0.234) / 255.0;
 }
 void main() {
   vec3 c = texture2D(tex, crop.xy + uv * crop.zw).rgb;
@@ -431,10 +431,11 @@ void main() {
   float adjusted = clamp((grayscale - 0.5) * contrast + 0.5 + bright / 100.0, 0.0, 1.0);
   float q = min(floor(adjusted * levels), levels - 1.0) / (levels - 1.0);
   float outputValue = posterize > 0.5 ? q : grayscale;
-  vec3 outputColor = vec3(outputValue);
+  vec3 outputColor = posterize < 0.5 && valueWarnings < 0.5 && saturationWarnings < 0.5
+    && edgeDetection < 0.5 && warmCool < 0.5 ? c : vec3(outputValue);
   float highest = max(c.r, max(c.g, c.b));
   float lowest = min(c.r, min(c.g, c.b));
-  float saturation = highest > 0.0 ? (highest - lowest) / highest : 0.0;
+  float saturation = highest - lowest;
   if (edgeDetection > 0.5) {
     vec2 texel = max(1.0 / sourceSize, crop.zw / viewportSize);
     vec2 sourceCoord = crop.xy + uv * crop.zw;
@@ -461,7 +462,8 @@ void main() {
         : vec3(255.0, 112.0, 12.0) / 255.0;
       outputColor = mix(neutral, endpoint, min(abs(temperature) * 2.0, 1.0));
     } else if (saturationWarnings > 0.5 && highest > saturationBrightnessThreshold / 100.0) {
-      outputColor = saturationGradient(saturation);
+      float threshold = saturationBrightnessThreshold / 100.0;
+      outputColor = mix(outputColor, saturationGradient(saturation), smoothstep(threshold, threshold + 0.1, highest));
     }
     if (valueWarnings > 0.5) {
       if (grayscale <= darkThreshold) {

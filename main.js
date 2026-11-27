@@ -686,6 +686,12 @@ app.whenReady().then(() => {
   ipcMain.on('quit', () => app.quit());
 });
 
+app.on('before-quit', () => {
+  autoUpdater.stopPeriodicCheck();
+  // Guarantee the process ends even if a window or handle stalls shutdown.
+  setTimeout(() => app.exit(0), 3000).unref();
+});
+
 app.on('window-all-closed', () => {
   autoUpdater.stopPeriodicCheck();
   app.quit();

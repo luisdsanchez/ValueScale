@@ -370,7 +370,7 @@ test('warm/cool map replaces other checks and failed writes leave them unchanged
   assert.equal(reopened.handlers['get-settings']().warmCool, false);
 });
 
-test('all checks replace one another and toggling the active check restores grayscale', async () => {
+test('all checks replace one another and toggling the active check turns all checks off', async () => {
   const { handlers, writes } = await loadMain();
   const checks = ['posterize', 'edgeDetection', 'valueWarnings', 'saturationWarnings', 'warmCool'];
   handlers['adjust-filter'](null, 'posterize');
@@ -558,7 +558,7 @@ test('warning endpoints migrate to the supported range and persist', async () =>
   assert.equal(reopened.handlers['get-settings']().lightThreshold, 99);
 });
 
-test('grayscale stays enabled while saturation warnings and adjustments persist', async () => {
+test('legacy grayscale setting is ignored while saturation warnings and adjustments persist', async () => {
   const { handlers, listeners, writes } = await loadMain({ version: 6, grayscale: false, levels: 4, brightness: 25, contrast: 2 });
   let settings = handlers['get-settings']();
   assert.equal('grayscale' in settings, false);
