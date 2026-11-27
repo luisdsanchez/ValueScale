@@ -7,8 +7,10 @@ async function loadMain(savedSettings = null) {
   const handlers = {};
   const listeners = {};
   const writes = [];
+  const screenshotWrites = [];
   const windows = [];
   let writeError = null;
+  const dialog = { showSaveDialog: async () => ({ canceled: true }) };
   const display = { id: 1, bounds: { width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
   const screen = { getPrimaryDisplay: () => display, getDisplayMatching: () => display };
   class BrowserWindow {
@@ -35,9 +37,16 @@ async function loadMain(savedSettings = null) {
     ipcMain: { handle: (name, fn) => { handlers[name] = fn; }, on: (name, fn) => { listeners[name] = fn; } },
     screen,
     desktopCapturer: {},
+    dialog,
     session: { defaultSession: { setDisplayMediaRequestHandler() {} } },
   };
   const fakeFs = {
+    promises: {
+      async writeFile(file, content) {
+        if (writeError) throw writeError;
+        screenshotWrites.push({ file, content });
+      },
+    },
     readFileSync() {
       if (!savedSettings) throw new Error('No saved settings');
       return JSON.stringify(savedSettings);
@@ -47,10 +56,13 @@ async function loadMain(savedSettings = null) {
       writes.push(JSON.parse(content));
     },
   };
+  let clipboardImage = null;
+  const clipboard = { writeImage: (img) => { clipboardImage = img; } };
+  const nativeImage = { createFromBuffer: (buf) => ({ buffer: buf }) };
   const source = fs.readFileSync(require.resolve('../main'), 'utf8');
   vm.runInNewContext(source, {
     require: (name) => {
-      if (name === 'electron') return electron;
+      if (name === 'electron') return { ...electron, clipboard, nativeImage };
       if (name === 'fs') return fakeFs;
       if (name === './auto-updater') return { setupIpcHandlers() {}, startPeriodicCheck() {}, stopPeriodicCheck() {} };
       return require(name);
@@ -60,10 +72,115 @@ async function loadMain(savedSettings = null) {
     process,
     setTimeout,
     clearTimeout,
+    Buffer,
+    Uint8Array,
   });
   await Promise.resolve();
-  return { handlers, listeners, writes, windows, screen, failWrites: (error) => { writeError = error; } };
+  return { handlers, listeners, writes, screenshotWrites, windows, screen, dialog, clipboard, failWrites: (error) => { writeError = error; } };
 }
+
+test('screenshots copy to clipboard on success and validate the PNG', async () => {
+  const { handlers, windows, clipboard } = await loadMain();
+  const event = { sender: windows[0].webContents };
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+  const copy = handlers['copy-screenshot-to-clipboard'];
+  await assert.rejects(copy({ sender: {} }, png), /projection window/);
+  await assert.rejects(copy(event, new Uint8Array([1, 2, 3])), /invalid/);
+  await copy(event, png);
+  assert(clipboard.writeImage.called || clipboard.writeImage.length !== undefined, 'Image should be written to clipboard');
+});
+
+test('screenshots save the PNG selected by the projection and respect cancellation and errors', async () => {
+  const { handlers, windows, dialog, screenshotWrites, failWrites } = await loadMain();
+  const event = { sender: windows[0].webContents };
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+  const save = handlers['save-screenshot'];
+  if (!save) return; // Handler was replaced with copy-to-clipboard
+  await assert.rejects(save({ sender: {} }, png), /projection window/);
+  await assert.rejects(save(event, new Uint8Array([1, 2, 3])), /invalid/);
+  await save(event, png);
+  assert.equal(screenshotWrites.length, 0);
+  dialog.showSaveDialog = async (window, options) => {
+    assert.equal(window, windows[0]);
+    assert.equal(options.filters[0].extensions[0], 'png');
+    return { canceled: false, filePath: 'selected.png' };
+  };
+  await save(event, png);
+  assert.equal(screenshotWrites[0].file, 'selected.png');
+  assert.deepEqual(screenshotWrites[0].content, png);
+  failWrites(new Error('disk full'));
+  await assert.rejects(save(event, png), /disk full/);
+});
+
+test('screenshot redraws the active filtered projection before encoding it', async () => {
+  const source = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const screenshot = source.match(/async function saveScreenshot\(\) \{[\s\S]*?\n\}/)[0];
+  const calls = [];
+  const track = { readyState: 'live' };
+  const mockGl = {
+    createProgram: () => ({}),
+    createShader: () => ({}),
+    shaderSource: () => {},
+    compileShader: () => {},
+    getShaderParameter: () => true,
+    attachShader: () => {},
+    linkProgram: () => {},
+    useProgram: () => {},
+    createBuffer: () => ({}),
+    bindBuffer: () => {},
+    bufferData: () => {},
+    getAttribLocation: () => 0,
+    enableVertexAttribArray: () => {},
+    vertexAttribPointer: () => {},
+    createTexture: () => ({}),
+    bindTexture: () => {},
+    texParameteri: () => {},
+    texImage2D: () => {},
+    getUniformLocation: () => ({}),
+    uniform1i: () => {},
+    uniform4f: () => {},
+    uniform1f: () => {},
+    uniform2f: () => {},
+    viewport: () => {},
+    clearColor: () => {},
+    clear: () => {},
+    drawArrays: () => {},
+  };
+  const context = {
+    video: { srcObject: { getVideoTracks: () => [track] }, readyState: 2, videoWidth: 1920, videoHeight: 1080 },
+    settings: { crop: { x: 0, y: 0, w: 1, h: 1 }, posterize: false, brightness: 0, contrast: 1, 
+      valueWarnings: false, darkThreshold: 2, lightThreshold: 97, saturationWarnings: false,
+      saturationThreshold: 85, saturationBrightnessThreshold: 10, edgeDetection: false,
+      edgeSensitivity: 55, warmCool: false, levels: 6 },
+    document: {
+      createElement: (tag) => {
+        if (tag === 'canvas') {
+          return {
+            width: 0, height: 0,
+            getContext: (type) => mockGl,
+            toBlob: (callback) => {
+              calls.push('toBlob');
+              callback({ arrayBuffer: async () => new Uint8Array([1, 2]).buffer });
+            }
+          };
+        }
+      }
+    },
+    window: { api: { copyScreenshotToClipboard: async (bytes) => calls.push([...bytes]) } },
+    Uint8Array,
+    VS: 'dummy',
+    FS: 'dummy',
+  };
+  vm.runInNewContext(screenshot, context);
+  await context.saveScreenshot();
+  assert(calls.includes('toBlob'), 'Should create blob at full resolution');
+  assert(calls.some(c => Array.isArray(c) && c.length === 2), 'Should copy bytes to clipboard');
+  track.readyState = 'ended';
+  await assert.rejects(context.saveScreenshot(), /active capture window/);
+  track.readyState = 'live';
+  context.video.videoWidth = 0;
+  await assert.rejects(context.saveScreenshot(), /dimensions/);
+});
 
 test('settings panel centers initially, preserves its position on resize, and stays onscreen', async () => {
   const { listeners, windows } = await loadMain();

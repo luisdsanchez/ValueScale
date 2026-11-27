@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
   selectCaptureTarget: (target) => ipcRenderer.invoke('select-capture-target', target),
   setCrop: (crop) => ipcRenderer.invoke('set-crop', crop),
   setProjectionAspectRatio: (ratio) => ipcRenderer.invoke('set-projection-aspect-ratio', ratio),
+  copyScreenshotToClipboard: (png) => ipcRenderer.invoke('copy-screenshot-to-clipboard', png),
   setSettings: (patch) => ipcRenderer.send('set-settings', patch),
   dragStart: (p) => ipcRenderer.send('drag-start', p),
   dragMove: (p) => ipcRenderer.send('drag-move', p),

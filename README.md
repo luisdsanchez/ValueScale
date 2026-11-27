@@ -30,6 +30,7 @@ For development, run `npm start` after installing dependencies.
 - Use **saturation warnings** to show the saturation gradient, based on the captured color independently of the grayscale projection. By default it applies to colors above 10% HSV brightness (the highest RGB channel).
 - Enable **Show warm/cool map** to replace the grayscale view with a temperature map from the original captured colors. Red minus blue determines the position on the cool-blue to warm-orange scale; neutral grays, green and magenta sit at the neutral midpoint, and less intense colors appear closer to neutral.
 - The captured projection does not include the mouse pointer.
+- Use the camera button in the hover controls to copy the current filtered projection to your clipboard. A confirmation message appears when the screenshot is copied successfully.
 
 Defaults: 4 gray values (6 total shades including black and white), with brightness
 and contrast adjustments both at 0. These neutral adjustments preserve the existing

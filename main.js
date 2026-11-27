@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, desktopCapturer, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, desktopCapturer, session, dialog, clipboard, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -561,6 +561,18 @@ app.whenReady().then(() => {
     projectionAspectRatio = ratio;
     fitWindowToAspectRatio(ratio, screen.getDisplayMatching(win.getBounds()));
     return ratio;
+  });
+  ipcMain.handle('copy-screenshot-to-clipboard', async (event, png) => {
+    if (!win || win.isDestroyed() || event.sender !== win.webContents) {
+      throw new Error('The projection window is unavailable.');
+    }
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (!(png instanceof Uint8Array) || png.length < signature.length
+      || !signature.every((byte, index) => png[index] === byte)) {
+      throw new Error('The screenshot image is invalid.');
+    }
+    const image = nativeImage.createFromBuffer(Buffer.from(png));
+    clipboard.writeImage(image);
   });
   ipcMain.handle('start-crop-selection', async () => {
     if (!win || win.isDestroyed()) throw new Error('The projection window is unavailable.');
